@@ -1,0 +1,34 @@
+[package]
+name = "foliopdf"
+description = "Fast, portable PDF editing: parse, merge, split, compress, encrypt, stamp and write PDFs. Pure Rust, compiles to WebAssembly."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "../../README.md"
+documentation = "https://docs.rs/foliopdf"
+
+[dependencies]
+miniz_oxide.workspace = true
+md-5.workspace = true
+sha2.workspace = true
+aes.workspace = true
+cbc.workspace = true
+getrandom.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+
+[features]
+default = []
+
+[[bench]]
+name = "throughput"
+harness = false

@@ -1,0 +1,72 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  cli:
+    name: CLI (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - { os: ubuntu-latest,  target: x86_64-unknown-linux-gnu,  bin: folio }
+          - { os: ubuntu-latest,  target: aarch64-unknown-linux-gnu, bin: folio, cross: true }
+          - { os: macos-latest,   target: aarch64-apple-darwin,      bin: folio }
+          - { os: macos-latest,   target: x86_64-apple-darwin,       bin: folio }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc,    bin: folio.exe }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - if: matrix.cross
+        run: |
+          sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+          echo 'CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc' >> $GITHUB_ENV
+      - run: cargo build --release -p foliopdf-cli --target ${{ matrix.target }}
+      - name: Package
+        shell: bash
+        run: |
+          mkdir dist
+          cp target/${{ matrix.target }}/release/${{ matrix.bin }} dist/
+          cp LICENSE README.md dist/
+          cd dist && tar czf ../folio-${{ github.ref_name }}-${{ matrix.target }}.tar.gz *
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: folio-*.tar.gz
+
+  npm:
+    name: npm package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+      - run: ./scripts/build-wasm.sh
+      - run: node examples/node/smoke.mjs
+      - run: cd pkg && npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        continue-on-error: true
+
+  crates:
+    name: crates.io
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo publish -p foliopdf --token ${{ secrets.CARGO_TOKEN }}
+        continue-on-error: true
+      - run: sleep 60 && cargo publish -p foliopdf-cli --token ${{ secrets.CARGO_TOKEN }}
+        continue-on-error: true

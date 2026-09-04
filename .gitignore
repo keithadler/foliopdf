@@ -1,0 +1,9 @@
+/target
+**/target
+/crates/foliopdf-wasm/pkg
+/examples/web/pkg
+node_modules
+*.log
+.DS_Store
+/tmp
+/testdata/local

@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>foliopdf demo</title>
+<style>
+  :root { color-scheme: light dark; font: 15px/1.45 system-ui, sans-serif; }
+  body { max-width: 860px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.5rem; margin: 0 0 .25rem; }
+  .sub { opacity: .7; margin: 0 0 1.5rem; }
+  #drop { border: 2px dashed #8884; border-radius: 12px; padding: 2rem; text-align: center; cursor: pointer; }
+  #drop.over { border-color: #06c; background: #06c11d; }
+  fieldset { border: 1px solid #8884; border-radius: 8px; margin: 1rem 0; }
+  label { display: inline-block; margin: .25rem 1rem .25rem 0; }
+  input[type=text], input[type=number], select { padding: .3rem .4rem; }
+  button { padding: .5rem 1rem; border-radius: 8px; border: 1px solid #8886; cursor: pointer; }
+  button.primary { background: #06c; color: #fff; border-color: #06c; }
+  #files li { margin: .2rem 0; }
+  #out { margin-top: 1rem; }
+  #out a { display: block; margin: .3rem 0; }
+  pre { background: #8881; padding: .75rem; border-radius: 8px; overflow: auto; font-size: 13px; }
+  .warn { color: #b60; }
+  .err { color: #c22; }
+</style>
+</head>
+<body>
+<h1>foliopdf</h1>
+<p class="sub">PDF editing in your browser. Files never leave this page. <span id="ver"></span></p>
+
+<div id="drop">Drop PDFs here or click to choose<input id="pick" type="file" accept="application/pdf" multiple hidden></div>
+<ul id="files"></ul>
+
+<fieldset>
+  <legend>Preset</legend>
+  <label>Saved presets <select id="preset"></select></label>
+  <button id="loadPreset">Load into editor</button>
+  <button id="savePreset">Save editor as preset</button>
+  <button id="deletePreset">Delete</button>
+  <p style="opacity:.7;margin:.5rem 0 0">Presets are stored in <code>localStorage</code> as JSON via <code>PresetStore</code>; the same JSON runs unchanged with the <code>folio</code> CLI.</p>
+</fieldset>
+
+<fieldset>
+  <legend>Editor</legend>
+  <label>Name <input id="name" type="text" value="my-export"></label>
+  <label>Mode <select id="mode"><option value="each">each file</option><option value="merge">merge all</option></select></label><br>
+  <label><input id="stamp" type="checkbox" checked> Watermark <input id="stampText" type="text" value="DRAFT" size="12"> opacity <input id="opacity" type="number" min="0" max="1" step=".05" value="0.3" style="width:4.5em"> rotation <input id="rotation" type="number" value="45" style="width:4em"></label><br>
+  <label><input id="numbers" type="checkbox" checked> Page numbers <input id="numFmt" type="text" value="{page} / {pages}" size="14"></label><br>
+  <label>Rotate pages <input id="rotPages" type="text" placeholder="e.g. odd" size="8"> by <select id="rotDeg"><option>0</option><option>90</option><option>180</option><option>270</option></select></label><br>
+  <label>Keep only pages <input id="select" type="text" placeholder="e.g. 1-3,last" size="12"></label>
+  <label>Split every <input id="every" type="number" min="0" value="0" style="width:4em"> pages (0 = no split)</label><br>
+  <label><input id="strip" type="checkbox"> Strip metadata</label>
+  <label>Title <input id="title" type="text" size="16"></label><br>
+  <label>Owner password <input id="owner" type="text" size="12"></label>
+  <label>User password <input id="user" type="text" size="12"></label>
+  <label><input id="noCopy" type="checkbox"> forbid copy</label>
+  <label><input id="noModify" type="checkbox"> forbid modify</label><br>
+  <label>Output name <input id="filename" type="text" value="{stem}-edited.pdf" size="20"></label>
+</fieldset>
+
+<button id="run" class="primary">Run</button>
+<button id="showJson">Show preset JSON</button>
+<div id="out"></div>
+<pre id="json" hidden></pre>
+
+<script type="module">
+  import init, { PdfDocument, runBatch, PresetStore, version } from "../../pkg/foliopdf.js";
+  await init();
+  document.getElementById("ver").textContent = "v" + version();
+
+  const $ = (id) => document.getElementById(id);
+  const files = [];
+  const KEY = "foliopdf.presets";
+  let store = (() => { try { const j = localStorage.getItem(KEY); return j ? PresetStore.fromJson(j) : PresetStore.withBuiltins(); } catch { return PresetStore.withBuiltins(); } })();
+
+  function refreshPresets() {
+    const sel = $("preset"); sel.innerHTML = "";
+    for (const n of store.names()) { const o = document.createElement("option"); o.textContent = n; sel.appendChild(o); }
+  }
+  function persist() { try { localStorage.setItem(KEY, store.toJson()); } catch {} refreshPresets(); }
+  refreshPresets();
+
+  function addFiles(list) {
+    for (const f of list) if (f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf")) files.push(f);
+    renderFiles();
+  }
+  async function renderFiles() {
+    const ul = $("files"); ul.innerHTML = "";
+    for (const f of files) {
+      const li = document.createElement("li");
+      try {
+        const doc = PdfDocument.load(new Uint8Array(await f.arrayBuffer()));
+        const p = doc.pages()[0];
+        li.textContent = `${f.name}: ${doc.pageCount()} pages, ${Math.round(p.mediaBox.x1 - p.mediaBox.x0)}×${Math.round(p.mediaBox.y1 - p.mediaBox.y0)} pt` +
+          (doc.wasEncrypted() ? `, ${doc.encryptionDescription()}` : "") + (doc.wasReconstructed() ? " (repaired)" : "");
+        doc.free();
+      } catch (e) { li.innerHTML = `${f.name}: <span class="err">${e.message}</span>`; }
+      ul.appendChild(li);
+    }
+  }
+  const drop = $("drop");
+  drop.addEventListener("click", () => $("pick").click());
+  $("pick").addEventListener("change", (e) => addFiles(e.target.files));
+  drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+  drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); addFiles(e.dataTransfer.files); });
+
+  function editorToPreset() {
+    const steps = [];
+    if ($("select").value.trim()) steps.push({ op: "select-pages", pages: $("select").value.trim() });
+    if (+$("rotDeg").value) steps.push({ op: "rotate", pages: $("rotPages").value.trim() || undefined, degrees: +$("rotDeg").value });
+    if ($("stamp").checked) steps.push({ op: "stamp-text", text: $("stampText").value, opacity: +$("opacity").value, rotation: +$("rotation").value, size: 72 });
+    if ($("numbers").checked) steps.push({ op: "page-numbers", format: $("numFmt").value });
+    if ($("title").value) steps.push({ op: "metadata", title: $("title").value });
+    if ($("strip").checked) steps.push({ op: "strip-metadata" });
+    if (+$("every").value > 0) steps.push({ op: "split", every: +$("every").value });
+    const output = { filename: $("filename").value || "{stem}.pdf" };
+    if ($("owner").value || $("user").value)
+      output.encryption = { ownerPassword: $("owner").value, userPassword: $("user").value, permissions: { copy: !$("noCopy").checked, modify: !$("noModify").checked } };
+    return { name: $("name").value || "untitled", mode: $("mode").value, steps, output };
+  }
+  function presetToEditor(p) {
+    $("name").value = p.name; $("mode").value = p.mode || "each";
+    $("stamp").checked = false; $("numbers").checked = false; $("strip").checked = false;
+    $("select").value = ""; $("rotPages").value = ""; $("rotDeg").value = "0"; $("every").value = 0; $("title").value = "";
+    for (const s of p.steps || []) {
+      if (s.op === "stamp-text") { $("stamp").checked = true; $("stampText").value = s.text; $("opacity").value = s.opacity ?? 0.5; $("rotation").value = s.rotation ?? 0; }
+      if (s.op === "page-numbers") { $("numbers").checked = true; $("numFmt").value = s.format ?? "{page} / {pages}"; }
+      if (s.op === "rotate") { $("rotPages").value = s.pages ?? ""; $("rotDeg").value = String(((s.degrees % 360) + 360) % 360); }
+      if (s.op === "select-pages") $("select").value = s.pages;
+      if (s.op === "split") $("every").value = s.every ?? 0;
+      if (s.op === "strip-metadata") $("strip").checked = true;
+      if (s.op === "metadata" && s.title) $("title").value = s.title;
+    }
+    const e = p.output?.encryption;
+    $("owner").value = e?.ownerPassword ?? ""; $("user").value = e?.userPassword ?? "";
+    $("noCopy").checked = e ? e.permissions?.copy === false : false; $("noModify").checked = e ? e.permissions?.modify === false : false;
+    $("filename").value = p.output?.filename ?? "{stem}.pdf";
+  }
+  $("loadPreset").onclick = () => { const p = store.get($("preset").value); if (p) presetToEditor(p); };
+  $("savePreset").onclick = () => { try { store.add(editorToPreset()); persist(); } catch (e) { alert(e.message); } };
+  $("deletePreset").onclick = () => { store.remove($("preset").value); persist(); };
+  $("showJson").onclick = () => { const pre = $("json"); pre.hidden = !pre.hidden; pre.textContent = JSON.stringify(editorToPreset(), null, 2); };
+
+  $("run").onclick = async () => {
+    const out = $("out"); out.innerHTML = "";
+    if (!files.length) { out.innerHTML = '<p class="err">Add some PDFs first.</p>'; return; }
+    const inputs = [];
+    for (const f of files) inputs.push({ name: f.name, data: new Uint8Array(await f.arrayBuffer()) });
+    const t0 = performance.now();
+    try {
+      const { outputs, warnings } = runBatch(editorToPreset(), inputs, []);
+      const ms = Math.round(performance.now() - t0);
+      out.innerHTML = `<p>${outputs.length} file(s) in ${ms} ms</p>`;
+      for (const w of warnings) out.innerHTML += `<p class="warn">${w}</p>`;
+      for (const o of outputs) {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(new Blob([o.data], { type: "application/pdf" }));
+        a.download = o.name; a.textContent = `${o.name} (${o.pages} pages, ${(o.bytes / 1024).toFixed(1)} KB)`;
+        out.appendChild(a);
+      }
+    } catch (e) { out.innerHTML = `<p class="err">${e.message}</p>`; }
+  };
+</script>
+</body>
+</html>
