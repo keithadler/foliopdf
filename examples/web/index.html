@@ -172,6 +172,9 @@
   .why3 div { color: var(--muted); font-size: 15px; }
   .why3 b { color: var(--ink); display: block; margin-bottom: 4px; }
   .sr { position: absolute; left: -9999px; }
+  .tip { margin-top: 16px; font-size: 14px; color: var(--muted); }
+  .tip a { color: var(--accent); text-decoration: none; font-weight: 600; }
+  .tip a:hover { text-decoration: underline; }
   .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: 15px; box-shadow: var(--shadow); z-index: 60; opacity: 0; transition: opacity .2s; pointer-events: none; }
   .toast.show { opacity: 1; }
   @media (max-width: 600px) {
@@ -216,6 +219,7 @@
 
   <footer>
     <span>foliopdf <span id="ver"></span> · MIT licence · <a href="https://github.com/keithadler/foliopdf">GitHub</a> · <a href="https://github.com/keithadler/foliopdf/issues">Report a problem</a></span>
+    <span>Free, no ads, no accounts. If it saved you a subscription, a tip is welcome: <a href="https://venmo.com/u/Keith-Adler-1" target="_blank" rel="noopener">Venmo @Keith-Adler-1</a></span>
     <span>Bytes uploaded to any server: <b>0</b></span>
   </footer>
 </div>

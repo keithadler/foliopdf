@@ -154,6 +154,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports with a PDF that
 misbehaves are the most valuable thing you can send; see
 [SECURITY.md](SECURITY.md) for anything that could be a safety issue.
 
+## Support the project
+
+foliopdf is free and always will be. If it replaced a subscription for you,
+a tip is welcome: [Venmo @Keith-Adler-1](https://venmo.com/u/Keith-Adler-1).
+
 ## Licence
 
 MIT. See [LICENSE](LICENSE).

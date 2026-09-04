@@ -313,7 +313,8 @@ function showResults(outs, ms) {
   if (outs.length > 1) again.append(el("button", { class: "btn primary", onclick: () => { links.forEach(([u, n], i) => setTimeout(() => { const a = el("a", { href: u, download: n }); document.body.append(a); a.click(); a.remove(); }, i * 300)); toast(`Downloading ${outs.length} files. Your browser may ask once to allow multiple downloads.`); } }, `Download all ${outs.length} files`));
   again.append(el("button", { class: "btn", onclick: () => { freeAll(); renderStage(); } }, "Do another"), el("button", { class: "btn", onclick: () => { renderStage(); } }, "Adjust options"), el("button", { class: "btn", onclick: home }, "All tools"));
   const total = outs.reduce((a, o) => a + o.data.length, 0);
-  put(el("div", { class: "panel result" }, el("div", { class: "done", "aria-hidden": true }, "✅"), el("h3", {}, outs.length === 1 ? "Your file is ready" : `${outs.length} files are ready`), el("p", {}, `Done in ${ms < 1000 ? ms + " ms" : (ms / 1000).toFixed(1) + " s"}, entirely on this device.${outs.length > 1 ? ` ${kb(total)} in total.` : ""}`), list, again));
+  const tip = el("p", { class: "tip" }, "This tool is free and always will be. If it saved you a subscription, you're welcome to leave a tip: ", el("a", { href: "https://venmo.com/u/Keith-Adler-1", target: "_blank", rel: "noopener" }, "Venmo @Keith-Adler-1"), ".");
+  put(el("div", { class: "panel result" }, el("div", { class: "done", "aria-hidden": true }, "✅"), el("h3", {}, outs.length === 1 ? "Your file is ready" : `${outs.length} files are ready`), el("p", {}, `Done in ${ms < 1000 ? ms + " ms" : (ms / 1000).toFixed(1) + " s"}, entirely on this device.${outs.length > 1 ? ` ${kb(total)} in total.` : ""}`), list, again, tip));
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 // Apply fn(doc, entry) to every loaded file; save each; collect outputs.
