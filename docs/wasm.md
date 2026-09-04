@@ -129,6 +129,9 @@ node examples/node/smoke.mjs  # sanity check
 
 `examples/web/index.html` is the complete web app (merge, split, compress,
 protect, unlock, rotate, organize, watermark, page numbers, info, batch).
-Serve the repo root with any static server (`python3 -m http.server 8765`)
-and open `/examples/web/`. It is a single file with no build step; copy it
-next to `pkg/` to host it anywhere.
+It is deployed to https://keithadler.github.io/foliopdf/ by
+`.github/workflows/pages.yml` on every push to `main`. Locally, build `pkg/`
+and serve the repo root (`python3 -m http.server 8765`), then open
+`/examples/web/` (a `pkg` symlink there points at the build). It is a single
+file with no build step; host it anywhere by placing `index.html` next to a
+`pkg/` folder containing `foliopdf.js` and `foliopdf_bg.wasm`.

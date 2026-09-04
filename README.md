@@ -6,6 +6,7 @@ Open PDFs (including damaged and encrypted ones), then merge, split, reorder,
 rotate, stamp, compress and encrypt them, and write clean compact output.
 Runs in browsers, Node, Deno, Bun and natively on Linux, macOS and Windows.
 
+- **Web app**: [keithadler.github.io/foliopdf](https://keithadler.github.io/foliopdf/), every tool in the browser, nothing uploaded.
 - **Rust crate** `foliopdf`: the engine, no I/O, no `unsafe`.
 - **npm package** `foliopdf`: WebAssembly bindings with TypeScript types.
 - **CLI** `folio`: single binary for scripts and shells.
