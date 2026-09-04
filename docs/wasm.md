@@ -129,7 +129,10 @@ node examples/node/smoke.mjs  # sanity check
 
 `examples/web/index.html` is the complete web app (merge, split, compress,
 protect, unlock, rotate, organize, watermark, page numbers, info, batch).
-It is deployed to https://keithadler.github.io/foliopdf/ by
+Page thumbnails in the app are drawn by [pdf.js](https://mozilla.github.io/pdf.js/)
+(Apache-2.0), fetched into `examples/web/vendor` by `scripts/fetch-vendor.sh`; the
+editing engine never depends on it and the app degrades to numbered tiles without
+it. It is deployed to https://keithadler.github.io/foliopdf/ by
 `.github/workflows/pages.yml` on every push to `main`. Locally, build `pkg/`
 and serve the repo root (`python3 -m http.server 8765`), then open
 `/examples/web/` (a `pkg` symlink there points at the build). It is a single

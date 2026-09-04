@@ -6,6 +6,16 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- `EncryptionOptions.method` now serialises as `aes-256`, `aes-128` and
+  `rc4-128` as documented; the old spellings (`aes256`, `aes128`, `rc4`) are
+  still accepted when reading.
+
+### Added
+- Web app: page thumbnails (via pdf.js) in Organize and in clickable page
+  grids for Delete, Split, Rotate, Watermark and Page numbers; visual preset
+  builder with import/export; phone layout.
+
 ## [0.1.0] - 2026-09-03
 
 First release.

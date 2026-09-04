@@ -8,3 +8,4 @@ node_modules
 /tmp
 /testdata/local
 /.claude
+/examples/web/vendor

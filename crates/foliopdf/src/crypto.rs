@@ -29,14 +29,16 @@ const PAD: [u8; 32] = [
 
 /// Encryption algorithm to use when saving.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "kebab-case")]
 pub enum Method {
     /// RC4 with a 128-bit key (revision 3). Legacy; weak.
+    #[serde(rename = "rc4-128", alias = "rc4", alias = "rc4_128")]
     Rc4_128,
     /// AES-128 in CBC mode (revision 4). Widely compatible.
+    #[serde(rename = "aes-128", alias = "aes128")]
     Aes128,
     /// AES-256 in CBC mode (revision 6, PDF 2.0). Recommended.
     #[default]
+    #[serde(rename = "aes-256", alias = "aes256")]
     Aes256,
 }
 
@@ -870,6 +872,30 @@ pub fn describe(encrypt: &Dict) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn method_names_match_docs() {
+        assert_eq!(
+            serde_json::to_string(&Method::Aes256).unwrap(),
+            "\"aes-256\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Method::Aes128).unwrap(),
+            "\"aes-128\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Method::Rc4_128).unwrap(),
+            "\"rc4-128\""
+        );
+        for (s, m) in [
+            ("\"aes-256\"", Method::Aes256),
+            ("\"aes256\"", Method::Aes256),
+            ("\"aes128\"", Method::Aes128),
+            ("\"rc4\"", Method::Rc4_128),
+        ] {
+            assert_eq!(serde_json::from_str::<Method>(s).unwrap(), m);
+        }
+    }
 
     #[test]
     fn rc4_vector() {

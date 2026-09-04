@@ -28,10 +28,12 @@ jobs:
           node-version: 22
       - run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
       - run: ./scripts/build-wasm.sh
+      - run: ./scripts/fetch-vendor.sh
       - name: Assemble site
         run: |
-          mkdir -p site/pkg
-          cp examples/web/index.html site/index.html
+          mkdir -p site/pkg site/vendor
+          cp examples/web/index.html examples/web/*.js site/
+          cp -r examples/web/vendor/. site/vendor/
           cp pkg/foliopdf.js pkg/foliopdf_bg.wasm site/pkg/
           touch site/.nojekyll
       - uses: actions/upload-pages-artifact@v3
