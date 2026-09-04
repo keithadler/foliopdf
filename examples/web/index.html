@@ -5,21 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>foliopdf — free PDF tools that stay on your device</title>
 <meta name="description" content="Merge, split, compress, protect, unlock, rotate, watermark and number PDFs in your browser. Free, open source, and nothing is uploaded.">
+<meta name="theme-color" content="#0b63d6">
 <style>
   :root {
-    --bg: #f6f7f9; --card: #fff; --ink: #14171f; --muted: #5c6470; --line: #e3e6ea;
-    --accent: #0b63d6; --accent-ink: #fff; --accent-soft: #e6f0fd; --ok: #1a7f4b; --warn: #a15c00; --err: #c0392b;
+    --bg: #f6f7f9; --card: #fff; --ink: #14171f; --muted: #5c6470; --line: #e3e6ea; --line-strong: #c9cfd6;
+    --accent: #0b63d6; --accent-ink: #fff; --accent-soft: #e6f0fd; --ok: #1a7f4b; --ok-soft: #e4f4ea; --warn: #8a4b00; --warn-soft: #fdf1df; --err: #b3261e; --err-soft: #fbe9e7;
     --radius: 14px; --shadow: 0 1px 2px rgba(0,0,0,.05), 0 8px 24px -12px rgba(20,23,31,.18);
     color-scheme: light dark;
   }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #0f1216; --card: #171b21; --ink: #eef1f5; --muted: #9aa3ae; --line: #2a3038; --accent: #4f8ff7; --accent-soft: #14253f; --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6); }
+    :root { --bg: #0f1216; --card: #171b21; --ink: #eef1f5; --muted: #9aa3ae; --line: #2a3038; --line-strong: #3a424c; --accent: #4f8ff7; --accent-soft: #14253f; --ok-soft: #12301f; --warn: #f0b35a; --warn-soft: #3a2a0f; --err: #ff7b72; --err-soft: #3d1b19; --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6); }
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; }
   body { background: var(--bg); color: var(--ink); font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  body.dragging::after { content: "Drop to add"; position: fixed; inset: 0; background: color-mix(in srgb, var(--accent) 12%, transparent); border: 4px dashed var(--accent); display: grid; place-items: center; font-size: 28px; font-weight: 700; color: var(--accent); pointer-events: none; z-index: 50; }
   a { color: var(--accent); }
   button { font: inherit; color: inherit; }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   .wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px 64px; }
 
   header { display: flex; align-items: center; justify-content: space-between; padding: 18px 0; gap: 16px; }
@@ -34,105 +37,139 @@
   .hero p { color: var(--muted); font-size: 18px; margin: 0 auto; max-width: 640px; }
   .pill { display: inline-flex; align-items: center; gap: 8px; background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 6px 14px; font-size: 14px; font-weight: 600; margin-top: 14px; }
   .pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+  .pill.bad::before { background: var(--err); }
 
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-top: 26px; }
   .tool { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; text-align: left; cursor: pointer; box-shadow: var(--shadow); transition: transform .12s, border-color .12s; display: flex; flex-direction: column; gap: 6px; }
-  .tool:hover, .tool:focus-visible { transform: translateY(-2px); border-color: var(--accent); outline: none; }
-  .tool .ico { width: 42px; height: 42px; border-radius: 10px; display: grid; place-items: center; font-size: 22px; background: var(--accent-soft); margin-bottom: 6px; }
+  .tool:hover, .tool:focus-visible { transform: translateY(-2px); border-color: var(--accent); }
+  .ico { width: 42px; height: 42px; border-radius: 10px; display: grid; place-items: center; font-size: 22px; background: var(--accent-soft); }
+  .tool .ico { margin-bottom: 6px; }
   .tool b { font-size: 17px; }
   .tool span { color: var(--muted); font-size: 14px; }
 
   .view { display: none; }
   .view.active { display: block; }
-  .back { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); text-decoration: none; margin: 8px 0 14px; font-size: 15px; background: none; border: 0; padding: 0; cursor: pointer; }
+  .back { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); text-decoration: none; margin: 8px 0 14px; font-size: 15px; background: none; border: 0; padding: 4px 0; cursor: pointer; }
   .back:hover { color: var(--ink); }
   .tool-head { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
-  .tool-head .ico { width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center; font-size: 26px; background: var(--accent-soft); }
+  .tool-head .ico { width: 48px; height: 48px; border-radius: 12px; font-size: 26px; }
   .tool-head h2 { margin: 0; font-size: 26px; letter-spacing: -.01em; }
   .tool-head p { margin: 2px 0 0; color: var(--muted); }
 
-  .drop { border: 2px dashed color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--card); border-radius: var(--radius); padding: 40px 20px; text-align: center; cursor: pointer; transition: background .12s, border-color .12s; }
+  .drop { border: 2px dashed var(--line-strong); background: var(--card); border-radius: var(--radius); padding: 40px 20px; text-align: center; cursor: pointer; transition: all .15s; }
   .drop.over { background: var(--accent-soft); border-color: var(--accent); }
   .drop .big { font-size: 20px; font-weight: 600; }
   .drop .sub { color: var(--muted); margin-top: 4px; }
   .drop .btn { margin-top: 14px; }
+  .drop.compact { padding: 12px 16px; display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 10px; }
+  .drop.compact .big { font-size: 15px; font-weight: 500; color: var(--muted); }
+  .drop.compact .btn { margin: 0; padding: 8px 14px; }
 
   .files { list-style: none; padding: 0; margin: 14px 0 0; display: flex; flex-direction: column; gap: 8px; }
   .file { display: flex; align-items: center; gap: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
-  .file .fico { width: 36px; height: 44px; border-radius: 6px; background: var(--accent-soft); display: grid; place-items: center; font-size: 12px; font-weight: 700; color: var(--accent); flex: none; }
-  .file .meta { flex: 1; min-width: 0; }
-  .file .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .file .info { color: var(--muted); font-size: 14px; }
-  .file .info.err { color: var(--err); }
-  .file .actions { display: flex; gap: 4px; }
+  .file[draggable=true] { cursor: grab; }
+  .file.drag-over { border-color: var(--accent); box-shadow: 0 -3px 0 var(--accent); }
+  .fico { width: 36px; height: 44px; border-radius: 6px; background: var(--accent-soft); display: grid; place-items: center; font-size: 11px; font-weight: 800; color: var(--accent); flex: none; letter-spacing: .02em; }
+  .file .meta, .out .meta { flex: 1; min-width: 0; }
+  .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .info { color: var(--muted); font-size: 14px; }
+  .info.err { color: var(--err); }
+  .file .actions { display: flex; gap: 4px; flex: none; }
   .iconbtn { border: 1px solid var(--line); background: transparent; border-radius: 8px; width: 34px; height: 34px; cursor: pointer; font-size: 15px; display: grid; place-items: center; }
   .iconbtn:hover { border-color: var(--accent); color: var(--accent); }
   .iconbtn:disabled { opacity: .35; cursor: default; }
-  .file input[type=password] { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: inherit; }
+  .pwrow { display: flex; gap: 6px; align-items: center; margin-top: 4px; flex-wrap: wrap; }
+  .pwrow input { padding: 7px 9px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: inherit; font: inherit; }
+  .summary { color: var(--muted); font-size: 14px; margin: 8px 4px 0; }
 
   .panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; margin-top: 16px; box-shadow: var(--shadow); }
   .panel h3 { margin: 0 0 12px; font-size: 16px; }
-  .row { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center; }
+  .row { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: flex-start; }
+  .row + .row { margin-top: 14px; }
   .field { display: flex; flex-direction: column; gap: 5px; min-width: 180px; flex: 1; }
-  .field > span, .check > span { font-size: 14px; color: var(--muted); }
-  .field input, .field select, .field textarea { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: inherit; font: inherit; }
-  .field input:focus, .field select:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
-  .field .hint { font-size: 13px; color: var(--muted); }
+  .field > span:first-child, .check > span { font-size: 14px; color: var(--muted); }
+  .field input, .field select, .field textarea { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: inherit; font: inherit; width: 100%; }
+  .field input[type=range] { padding: 0; }
+  .field input:focus, .field select:focus, .field textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+  .field input.bad { border-color: var(--err); }
+  .hint { font-size: 13px; color: var(--muted); }
+  .hint.ok { color: var(--ok); }
+  .hint.bad { color: var(--err); }
   .check { display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 6px 0; }
-  .check input { width: 18px; height: 18px; accent-color: var(--accent); }
-  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .check input { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; }
+  .check span { color: var(--ink) !important; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; flex-wrap: wrap; }
   .seg button { border: 0; background: transparent; padding: 9px 14px; cursor: pointer; }
   .seg button + button { border-left: 1px solid var(--line); }
   .seg button.on { background: var(--accent); color: var(--accent-ink); }
-  .swatches { display: flex; gap: 8px; }
+  .swatches { display: flex; gap: 8px; padding-top: 4px; }
   .swatch { width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
-  .swatch.on { border-color: var(--ink); }
+  .swatch.on { border-color: var(--ink); box-shadow: 0 0 0 2px var(--card) inset; }
   .anchor { display: grid; grid-template-columns: repeat(3, 34px); gap: 4px; }
   .anchor button { width: 34px; height: 26px; border: 1px solid var(--line); background: transparent; border-radius: 6px; cursor: pointer; }
   .anchor button.on { background: var(--accent); border-color: var(--accent); }
+  .pwfield { position: relative; }
+  .pwfield input { padding-right: 64px; }
+  .pwfield button { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: 0; background: transparent; color: var(--accent); cursor: pointer; font-size: 14px; padding: 4px 8px; }
+
+  .preview { width: 150px; height: 190px; background: #fff; color: #333; border: 1px solid var(--line-strong); border-radius: 4px; position: relative; overflow: hidden; flex: none; box-shadow: var(--shadow); }
+  .preview .lines { position: absolute; inset: 18px 14px; background: repeating-linear-gradient(#e9e9e9 0 2px, transparent 2px 9px); }
+  .preview .wm { position: absolute; left: 50%; top: 50%; font-weight: 700; white-space: nowrap; transform-origin: center; }
 
   .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 12px 20px; font-weight: 600; cursor: pointer; text-decoration: none; color: inherit; }
   .btn:hover { border-color: var(--accent); }
   .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-size: 17px; padding: 15px 26px; }
   .btn.primary:hover { filter: brightness(1.08); }
+  .btn.small { padding: 8px 14px; font-size: 14px; }
   .btn:disabled { opacity: .5; cursor: default; filter: none; }
-  .cta { display: flex; justify-content: center; margin: 22px 0 6px; }
+  .cta { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 22px 0 6px; }
   .cta .btn { min-width: 260px; }
+  .cta .why { font-size: 14px; color: var(--muted); margin: 0; }
 
   .result { text-align: center; }
   .result .done { font-size: 44px; }
   .result h3 { font-size: 22px; margin: 6px 0 4px; }
   .result p { color: var(--muted); margin: 0 0 16px; }
-  .outs { display: flex; flex-direction: column; gap: 8px; max-width: 560px; margin: 0 auto; text-align: left; }
-  .out { display: flex; align-items: center; gap: 12px; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--bg); }
-  .out .meta { flex: 1; min-width: 0; }
-  .out .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .out .info { color: var(--muted); font-size: 14px; }
+  .outs { display: flex; flex-direction: column; gap: 8px; max-width: 620px; margin: 0 auto; text-align: left; }
+  .out { display: flex; align-items: center; gap: 12px; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--bg); flex-wrap: wrap; }
   .out .info b { color: var(--ok); }
-  .result .again { margin-top: 18px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .out .obtns { display: flex; gap: 6px; }
+  .again { margin-top: 18px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
   .notice { border-radius: 12px; padding: 12px 14px; margin-top: 14px; font-size: 15px; }
-  .notice.warn { background: color-mix(in srgb, var(--warn) 12%, var(--card)); color: var(--warn); }
-  .notice.err { background: color-mix(in srgb, var(--err) 12%, var(--card)); color: var(--err); }
-  .progress { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin-top: 14px; }
+  .notice.warn { background: var(--warn-soft); color: var(--warn); }
+  .notice.err { background: var(--err-soft); color: var(--err); }
+  .notice.ok { background: var(--ok-soft); color: var(--ok); }
+  .progress { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin: 14px auto 0; max-width: 420px; }
   .progress i { display: block; height: 100%; width: 30%; background: var(--accent); animation: slide 1s infinite ease-in-out; }
+  .progress i.det { animation: none; transition: width .2s; }
   @keyframes slide { 0% { margin-left: 0 } 50% { margin-left: 70% } 100% { margin-left: 0 } }
 
-  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; margin-top: 14px; }
-  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px; text-align: center; cursor: grab; user-select: none; position: relative; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 12px; margin-top: 14px; }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px; text-align: center; cursor: grab; user-select: none; }
   .tile.dragging { opacity: .4; }
-  .tile.over { border-color: var(--accent); }
-  .tile .pg { margin: 0 auto; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; display: grid; place-items: center; font-weight: 700; color: var(--muted); font-size: 22px; transition: transform .15s; }
+  .tile.over { border-color: var(--accent); box-shadow: -3px 0 0 var(--accent); }
+  .tile .pg { margin: 0 auto; background: var(--bg); border: 1px solid var(--line-strong); border-radius: 4px; display: grid; place-items: center; font-weight: 700; color: var(--muted); font-size: 22px; transition: transform .15s; }
   .tile .num { font-size: 13px; color: var(--muted); margin-top: 6px; }
-  .tile .tacts { display: flex; justify-content: center; gap: 4px; margin-top: 6px; }
-  .tile.deleted .pg { opacity: .25; text-decoration: line-through; }
+  .tile .tacts { display: flex; justify-content: center; gap: 3px; margin-top: 6px; }
+  .tile .tacts .iconbtn { width: 28px; height: 28px; font-size: 13px; }
+  .tile.deleted .pg { opacity: .25; }
   .tile.deleted { border-style: dashed; }
 
   footer { margin-top: 56px; border-top: 1px solid var(--line); padding-top: 18px; color: var(--muted); font-size: 14px; display: flex; flex-wrap: wrap; gap: 8px 22px; justify-content: space-between; }
-  .why { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-top: 40px; }
-  .why div { color: var(--muted); font-size: 15px; }
-  .why b { color: var(--ink); display: block; margin-bottom: 4px; }
+  .why3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-top: 40px; }
+  .why3 div { color: var(--muted); font-size: 15px; }
+  .why3 b { color: var(--ink); display: block; margin-bottom: 4px; }
   .sr { position: absolute; left: -9999px; }
-  @media (max-width: 600px) { .hero p { font-size: 16px } nav a { margin-left: 12px } .cta .btn { width: 100% } }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: 15px; box-shadow: var(--shadow); z-index: 60; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  @media (max-width: 600px) {
+    .brand small, .hero h1 br { display: none } .brand { font-size: 18px } nav a { margin-left: 12px; font-size: 14px; white-space: nowrap }
+    .hero { padding-top: 12px } .hero h1 { font-size: 28px } .hero p { font-size: 16px } .cta .btn { width: 100%; min-width: 0 } .wrap { padding: 0 14px 48px }
+    .field { min-width: 100% } .row { gap: 12px }
+    .grid { grid-template-columns: 1fr 1fr; gap: 10px } .tool { padding: 14px } .tool .ico { width: 36px; height: 36px; font-size: 19px } .tool b { font-size: 15px } .tool span { font-size: 13px }
+    .tool-head h2 { font-size: 22px } .drop { padding: 28px 14px } .field { min-width: 140px } .out .obtns { width: 100%; } .out .obtns .btn { flex: 1; }
+    .preview { display: none; }
+  }
 </style>
 </head>
 <body>
@@ -142,125 +179,167 @@
       <svg viewBox="0 0 28 28" fill="none" aria-hidden="true"><rect x="3" y="2" width="18" height="24" rx="3" fill="var(--accent)"/><path d="M15 2v7h6" fill="var(--accent-soft)"/><rect x="7" y="13" width="10" height="2" rx="1" fill="#fff"/><rect x="7" y="17" width="8" height="2" rx="1" fill="#fff"/></svg>
       foliopdf <small>free PDF tools</small>
     </a>
-    <nav><a href="https://github.com/keithadler/foliopdf" target="_blank" rel="noopener">Open source</a><a href="#" data-tool="batch">Advanced</a></nav>
+    <nav><a href="https://github.com/keithadler/foliopdf" target="_blank" rel="noopener">Open source</a><a href="#batch">Advanced</a></nav>
   </header>
 
-  <!-- HOME -->
   <section class="view active" id="view-home">
     <div class="hero">
       <h1>Every PDF tool you pay for.<br>Free, and nothing leaves your device.</h1>
       <p>Merge, split, compress, protect, rotate, watermark. It all runs right here in your browser, so your files are never uploaded anywhere.</p>
-      <div class="pill" id="status">Loading…</div>
+      <div class="pill" id="status" role="status">Loading…</div>
     </div>
     <div class="grid" id="tools"></div>
-    <div class="why">
+    <div class="why3">
       <div><b>Private by design</b>Your files are processed on this device by WebAssembly. Turn off Wi-Fi and it still works.</div>
       <div><b>No accounts, no limits</b>No sign-up, no file-size cap, no daily quota, no watermark unless you add one.</div>
       <div><b>Open source, MIT</b>Read the code, host it yourself, or use the same engine from Rust, JavaScript or the command line.</div>
     </div>
   </section>
 
-  <!-- TOOL -->
   <section class="view" id="view-tool">
     <button class="back" id="back">← All tools</button>
     <div class="tool-head"><div class="ico" id="t-ico"></div><div><h2 id="t-title"></h2><p id="t-desc"></p></div></div>
-    <div id="stage"></div>
+    <div id="stage" aria-live="polite"></div>
   </section>
 
   <footer>
-    <span>foliopdf <span id="ver"></span> · MIT licence · <a href="https://github.com/keithadler/foliopdf">GitHub</a></span>
+    <span>foliopdf <span id="ver"></span> · MIT licence · <a href="https://github.com/keithadler/foliopdf">GitHub</a> · <a href="https://github.com/keithadler/foliopdf/issues">Report a problem</a></span>
     <span>Bytes uploaded to any server: <b>0</b></span>
   </footer>
 </div>
-<input type="file" id="picker" accept="application/pdf,.pdf" multiple class="sr">
-<input type="file" id="imgpicker" accept="image/png,image/jpeg" class="sr">
+<div class="toast" id="toast" role="status"></div>
+<input type="file" id="picker" accept="application/pdf,.pdf" multiple class="sr" aria-hidden="true">
+<input type="file" id="imgpicker" accept="image/png,image/jpeg" class="sr" aria-hidden="true">
 
 <script type="module">
-import init, { PdfDocument, runBatch, PresetStore, version } from "./pkg/foliopdf.js";
+import init, { PdfDocument, runBatch, PresetStore, parsePageRanges, version } from "./pkg/foliopdf.js";
 
+// ---------------------------------------------------------------- helpers
 const $ = (s, r = document) => r.querySelector(s);
 const el = (tag, attrs = {}, ...kids) => {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
     if (k === "class") e.className = v; else if (k === "html") e.innerHTML = v; else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else if (v !== false && v != null) e.setAttribute(k, v === true ? "" : v);
   }
-  for (const k of kids.flat()) if (k != null) e.append(k.nodeType ? k : document.createTextNode(k));
+  for (const k of kids.flat()) if (k != null && k !== false) e.append(k.nodeType ? k : document.createTextNode(k));
   return e;
 };
-const kb = (n) => n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : n >= 1024 ? (n / 1024).toFixed(0) + " KB" : n + " B";
+const kb = (n) => n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : n >= 1024 ? Math.round(n / 1024) + " KB" : n + " B";
 const stem = (n) => n.replace(/\.pdf$/i, "");
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+// Yield to the browser so progress can paint. Uses a MessageChannel rather than
+// setTimeout because hidden tabs throttle timers to once a second or worse.
+const sleep = (ms) => ms > 50 ? new Promise((r) => setTimeout(r, ms)) : new Promise((r) => { const c = new MessageChannel(); c.port1.onmessage = () => r(); c.port2.postMessage(0); });
+let toastTimer;
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2600); }
+// Turn engine errors into sentences a person can act on.
+function friendly(e) {
+  const m = (e && e.message) || String(e);
+  let x;
+  if ((x = m.match(/page index (\d+) out of range \(document has (\d+) pages\)/))) return `Page ${+x[1] + 1} doesn't exist. This file has ${plural(+x[2], "page")}.`;
+  if (/invalid page range "(.*)"/.test(m)) return `“${m.match(/invalid page range "(.*)"/)[1]}” isn't a page list I understand. Try something like 1-3, 5, last.`;
+  if (/password does not open/.test(m)) return "That password doesn't open this file.";
+  if (/unsupported encryption/.test(m)) return "This file uses a kind of encryption that isn't supported yet.";
+  if (/no startxref|invalid PDF|not a PDF|too small/.test(m)) return "This doesn't look like a PDF file, or it's too damaged to repair.";
+  if (/unrecognised format/.test(m)) return "That image isn't a PNG or JPEG.";
+  if (/interlaced PNG/.test(m)) return "That PNG is interlaced. Re-save it without interlacing and try again.";
+  return m;
+}
+// Persist small preferences per tool.
+// Never persisted: passwords, file handles, image bytes, and page selections (those belong to one document).
+const NO_PERSIST = new Set(["user", "owner", "for", "img", "imgName", "which", "custom", "ranges", "extract"]);
+const prefs = { get: (k, d) => { try { const v = localStorage.getItem("foliopdf." + k); return v ? { ...d, ...JSON.parse(v) } : d; } catch { return d; } }, set: (k, v) => { try { const rest = Object.fromEntries(Object.entries(v).filter(([key]) => !NO_PERSIST.has(key))); localStorage.setItem("foliopdf." + k, JSON.stringify(rest)); } catch {} } };
+// One options object per tool visit: re-renders keep every choice, storage keeps only the persistable ones.
+const prefCache = new Map();
+function pref(id, defaults) {
+  if (!prefCache.has(id)) prefCache.set(id, new Proxy(prefs.get(id, defaults), { set(t, k, v) { t[k] = v; prefs.set(id, t); return true; } }));
+  return prefCache.get(id);
+}
 
 // ---------------------------------------------------------------- tools
 const TOOLS = [
-  { id: "merge",     ico: "🧩", name: "Merge PDFs",       desc: "Combine several files into one, in the order you choose.", multi: true },
-  { id: "split",     ico: "✂️", name: "Split PDF",        desc: "Break a file into parts, or pull out just the pages you need." },
-  { id: "compress",  ico: "🗜️", name: "Compress PDF",     desc: "Make files smaller without touching the quality of scans or photos.", multi: true },
-  { id: "protect",   ico: "🔒", name: "Protect PDF",      desc: "Add a password and stop copying, printing or editing.", multi: true },
-  { id: "unlock",    ico: "🔓", name: "Unlock PDF",       desc: "Remove a password from a file you have the password for.", multi: true },
-  { id: "rotate",    ico: "🔄", name: "Rotate PDF",       desc: "Turn every page, or just the odd or even ones.", multi: true },
-  { id: "delete",    ico: "🗑️", name: "Delete pages",     desc: "Remove pages you don't want." },
-  { id: "organize",  ico: "🗂️", name: "Organize pages",   desc: "Drag pages into a new order, rotate or remove them one by one." },
-  { id: "watermark", ico: "💧", name: "Watermark",        desc: "Stamp text like DRAFT or CONFIDENTIAL, or a logo, on every page.", multi: true },
-  { id: "numbers",   ico: "🔢", name: "Page numbers",     desc: "Add page numbers wherever you like.", multi: true },
-  { id: "info",      ico: "📝", name: "Edit document info",desc: "Change the title, author and keywords, or wipe hidden metadata.", multi: true },
-  { id: "batch",     ico: "⚙️", name: "Batch & presets",  desc: "Save a set of steps and run it on many files at once.", multi: true },
+  { id: "merge",     ico: "🧩", name: "Merge PDFs",        desc: "Combine several files into one, in the order you choose.", multi: true },
+  { id: "split",     ico: "✂️", name: "Split PDF",         desc: "Break a file into parts, or pull out just the pages you need." },
+  { id: "compress",  ico: "🗜️", name: "Compress PDF",      desc: "Make files smaller without touching the quality of scans or photos.", multi: true },
+  { id: "protect",   ico: "🔒", name: "Protect PDF",       desc: "Add a password and stop copying, printing or editing.", multi: true },
+  { id: "unlock",    ico: "🔓", name: "Unlock PDF",        desc: "Remove a password from a file you have the password for.", multi: true },
+  { id: "rotate",    ico: "🔄", name: "Rotate PDF",        desc: "Turn every page, or just the odd or even ones.", multi: true },
+  { id: "delete",    ico: "🗑️", name: "Delete pages",      desc: "Remove pages you don't want." },
+  { id: "organize",  ico: "🗂️", name: "Organize pages",    desc: "Drag pages into a new order, rotate or remove them one by one." },
+  { id: "watermark", ico: "💧", name: "Watermark",         desc: "Stamp text like DRAFT or CONFIDENTIAL, or a logo, on every page.", multi: true },
+  { id: "numbers",   ico: "🔢", name: "Page numbers",      desc: "Add page numbers wherever you like.", multi: true },
+  { id: "info",      ico: "📝", name: "Edit document info", desc: "Change the title, author and keywords, or wipe hidden metadata.", multi: true },
+  { id: "batch",     ico: "⚙️", name: "Batch & presets",   desc: "Save a set of steps and run it on many files at once.", multi: true },
 ];
 
-let current = null;        // tool
-let files = [];            // {file, bytes, doc, pages, err, needsPw, pw}
+let current = null;
+let files = [];      // {file, bytes, doc, pages, err, needsPw, pw, enc, repaired}
 let stage;
+let engineOk = false;
 
 // ---------------------------------------------------------------- boot
 try {
   await init();
-  $("#status").textContent = "Ready · works offline · " + version();
+  engineOk = true;
+  $("#status").textContent = "Ready · works offline · v" + version();
   $("#ver").textContent = "v" + version();
 } catch (e) {
-  $("#status").textContent = "Could not load the engine: " + e.message;
+  $("#status").textContent = "The PDF engine could not load. Try a current browser (Chrome, Edge, Firefox, Safari 15+).";
+  $("#status").classList.add("bad");
 }
 const grid = $("#tools");
-for (const t of TOOLS) grid.append(el("button", { class: "tool", "data-tool": t.id, onclick: () => open(t.id) }, el("div", { class: "ico" }, t.ico), el("b", {}, t.name), el("span", {}, t.desc)));
+for (const t of TOOLS) grid.append(el("button", { class: "tool", "data-tool": t.id, onclick: () => open(t.id) }, el("div", { class: "ico", "aria-hidden": true }, t.ico), el("b", {}, t.name), el("span", {}, t.desc)));
 $("#home-link").onclick = (e) => { e.preventDefault(); home(); };
 $("#back").onclick = home;
-$('nav a[data-tool]').onclick = (e) => { e.preventDefault(); open("batch"); };
 window.addEventListener("hashchange", route);
-route();
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && current && !(e.target instanceof Element && e.target.closest("input,textarea,select"))) home(); });
+// Drop anywhere on a tool page.
+let dragDepth = 0;
+document.addEventListener("dragenter", (e) => { if (!current || !e.dataTransfer?.types?.includes("Files")) return; dragDepth++; document.body.classList.add("dragging"); });
+document.addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove("dragging"); } });
+document.addEventListener("dragover", (e) => { if (current) e.preventDefault(); });
+document.addEventListener("drop", (e) => { dragDepth = 0; document.body.classList.remove("dragging"); if (!current) return; e.preventDefault(); addFiles(e.dataTransfer.files); });
 
-function route() { const id = location.hash.slice(1); if (TOOLS.some((t) => t.id === id)) open(id, true); else home(true); }
-function home(fromRoute) { current = null; files.forEach((f) => f.doc?.free?.()); files = []; $("#view-tool").classList.remove("active"); $("#view-home").classList.add("active"); if (!fromRoute) history.replaceState(null, "", "#"); document.title = "foliopdf — free PDF tools that stay on your device"; }
+function route() { const id = location.hash.slice(1); if (TOOLS.some((t) => t.id === id)) { if (!current || current.id !== id) open(id, true); } else home(true); }
+function freeAll() { files.forEach((f) => { try { f.doc?.free?.(); } catch {} }); files = []; }
+function home(fromRoute) { current = null; freeAll(); $("#view-tool").classList.remove("active"); $("#view-home").classList.add("active"); if (fromRoute !== true && location.hash) history.pushState(null, "", location.pathname); document.title = "foliopdf — free PDF tools that stay on your device"; }
 function open(id, fromRoute) {
-  current = TOOLS.find((t) => t.id === id); files.forEach((f) => f.doc?.free?.()); files = [];
+  current = TOOLS.find((t) => t.id === id); freeAll(); prefCache.clear();
   $("#view-home").classList.remove("active"); $("#view-tool").classList.add("active");
   $("#t-ico").textContent = current.ico; $("#t-title").textContent = current.name; $("#t-desc").textContent = current.desc;
   document.title = current.name + " — foliopdf";
-  if (!fromRoute) history.replaceState(null, "", "#" + id);
-  stage = $("#stage"); stage.innerHTML = "";
-  renderStage();
-  window.scrollTo(0, 0);
+  if (fromRoute !== true) history.pushState(null, "", "#" + id);
+  stage = $("#stage"); renderStage(); window.scrollTo(0, 0);
 }
 
 // ---------------------------------------------------------------- files
+const isMulti = () => !!current.multi;
 function dropzone() {
-  const multi = current.multi || current.id === "merge";
-  const dz = el("div", { class: "drop", role: "button", tabindex: 0 },
-    el("div", { class: "big" }, multi ? "Drop your PDFs here" : "Drop your PDF here"),
-    el("div", { class: "sub" }, multi ? "or choose files from your computer" : "or choose a file from your computer"),
-    el("button", { class: "btn" }, multi ? "Choose files" : "Choose file"));
-  const pick = () => { $("#picker").multiple = multi; $("#picker").value = ""; $("#picker").click(); };
+  const multi = isMulti();
+  const has = files.length > 0;
+  const dz = el("div", { class: "drop" + (has ? " compact" : ""), role: "button", tabindex: 0, "aria-label": has ? (multi ? "Add more PDF files" : "Choose a different PDF") : (multi ? "Drop PDF files here or choose files" : "Drop a PDF here or choose a file") });
+  if (!has) dz.append(el("div", { class: "big" }, multi ? "Drop your PDFs here" : "Drop your PDF here"), el("div", { class: "sub" }, multi ? "or choose files from your computer" : "or choose a file from your computer"), el("button", { class: "btn", tabindex: -1 }, multi ? "Choose files" : "Choose file"));
+  else dz.append(el("div", { class: "big" }, multi ? "Drop more files anywhere on this page" : "Drop another file to replace this one"), el("button", { class: "btn small", tabindex: -1 }, multi ? "Add files" : "Choose a different file"));
+  const pick = () => { if (!engineOk) return toast("The PDF engine isn't loaded."); $("#picker").multiple = multi; $("#picker").value = ""; $("#picker").click(); };
   dz.onclick = pick; dz.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } };
   dz.ondragover = (e) => { e.preventDefault(); dz.classList.add("over"); };
   dz.ondragleave = () => dz.classList.remove("over");
-  dz.ondrop = (e) => { e.preventDefault(); dz.classList.remove("over"); addFiles(e.dataTransfer.files); };
+  dz.ondrop = (e) => { e.preventDefault(); e.stopPropagation(); dz.classList.remove("over"); document.body.classList.remove("dragging"); addFiles(e.dataTransfer.files); };
   $("#picker").onchange = (e) => addFiles(e.target.files);
   return dz;
 }
 async function addFiles(list) {
-  const multi = current.multi || current.id === "merge";
-  const incoming = [...list].filter((f) => /\.pdf$/i.test(f.name) || f.type === "application/pdf");
-  if (!incoming.length) return;
-  if (!multi) { files.forEach((f) => f.doc?.free?.()); files = []; }
-  for (const file of multi ? incoming : incoming.slice(0, 1)) {
+  const all = [...list];
+  const pdfs = all.filter((f) => /\.pdf$/i.test(f.name) || f.type === "application/pdf");
+  const rejected = all.length - pdfs.length;
+  if (rejected) toast(rejected === 1 ? "Only PDF files can be added here." : `${rejected} files weren't PDFs and were skipped.`);
+  if (!pdfs.length) return;
+  const multi = isMulti();
+  if (!multi) freeAll();
+  const dupes = pdfs.filter((p) => files.some((f) => f.file.name === p.name && f.file.size === p.size));
+  if (dupes.length && multi) toast(`${dupes[0].name} is already in the list.`);
+  const fresh = multi ? pdfs.filter((p) => !dupes.includes(p)) : pdfs.slice(0, 1);
+  for (const file of fresh) {
     const entry = { file, bytes: new Uint8Array(await file.arrayBuffer()), pw: "" };
     files.push(entry);
     loadEntry(entry);
@@ -268,276 +347,400 @@ async function addFiles(list) {
   renderStage();
 }
 function loadEntry(entry) {
-  entry.doc?.free?.(); entry.doc = null; entry.err = null; entry.needsPw = false;
+  try { entry.doc?.free?.(); } catch {}
+  entry.doc = null; entry.err = null; entry.needsPw = false;
+  if (!entry.bytes.length) { entry.err = "This file is empty."; return; }
   try {
     entry.doc = entry.pw ? PdfDocument.loadWithPassword(entry.bytes, entry.pw) : PdfDocument.load(entry.bytes);
     entry.pages = entry.doc.pageCount();
     entry.enc = entry.doc.wasEncrypted() ? entry.doc.encryptionDescription() : null;
     entry.repaired = entry.doc.wasReconstructed();
+    if (entry.pages === 0) { entry.doc.free(); entry.doc = null; entry.err = "This PDF has no pages."; }
   } catch (e) {
-    if (/password/i.test(e.message)) entry.needsPw = true; else entry.err = e.message;
+    if (/password/i.test(e.message)) { entry.needsPw = true; entry.wrongPw = !!entry.pw; } else entry.err = friendly(e);
   }
 }
 function fileList(opts = {}) {
   if (!files.length) return null;
-  const ul = el("ul", { class: "files" });
+  const ul = el("ul", { class: "files", "aria-label": "Files" });
+  let dragFrom = null;
   files.forEach((f, i) => {
-    const info = f.err ? el("div", { class: "info err" }, f.err)
-      : f.needsPw ? el("div", { class: "info" }, "This file has a password. ", el("input", { type: "password", placeholder: "Enter password", onkeydown: (e) => { if (e.key === "Enter") { f.pw = e.target.value; loadEntry(f); renderStage(); } }, onchange: (e) => { f.pw = e.target.value; loadEntry(f); renderStage(); } }))
-      : el("div", { class: "info" }, `${f.pages} page${f.pages === 1 ? "" : "s"} · ${kb(f.bytes.length)}` + (f.enc ? ` · protected (${f.enc})` : "") + (f.repaired ? " · repaired a damaged file" : ""));
+    let info;
+    if (f.err) info = el("div", { class: "info err" }, f.err);
+    else if (f.needsPw) {
+      const inp = el("input", { type: "password", placeholder: "Password", "aria-label": `Password for ${f.file.name}`, autocomplete: "off" });
+      const go = () => { f.pw = inp.value; loadEntry(f); renderStage(); };
+      inp.onkeydown = (e) => { if (e.key === "Enter") go(); };
+      info = el("div", { class: "info" + (f.wrongPw ? " err" : "") }, f.wrongPw ? "That password didn't work. " : "This file is password protected. ", el("div", { class: "pwrow" }, inp, el("button", { class: "btn small", onclick: go }, "Unlock")));
+      setTimeout(() => { if (document.activeElement === document.body) inp.focus(); }, 0);
+    } else info = el("div", { class: "info" }, `${plural(f.pages, "page")} · ${kb(f.bytes.length)}` + (f.enc ? ` · protected (${f.enc})` : "") + (f.repaired ? " · repaired a damaged file" : ""));
     const acts = el("div", { class: "actions" });
     if (opts.reorder) {
-      acts.append(el("button", { class: "iconbtn", title: "Move up", disabled: i === 0, onclick: () => { [files[i - 1], files[i]] = [files[i], files[i - 1]]; renderStage(); } }, "↑"));
-      acts.append(el("button", { class: "iconbtn", title: "Move down", disabled: i === files.length - 1, onclick: () => { [files[i + 1], files[i]] = [files[i], files[i + 1]]; renderStage(); } }, "↓"));
+      acts.append(el("button", { class: "iconbtn", title: "Move up", "aria-label": "Move up", disabled: i === 0, onclick: () => { [files[i - 1], files[i]] = [files[i], files[i - 1]]; renderStage(); } }, "↑"));
+      acts.append(el("button", { class: "iconbtn", title: "Move down", "aria-label": "Move down", disabled: i === files.length - 1, onclick: () => { [files[i + 1], files[i]] = [files[i], files[i + 1]]; renderStage(); } }, "↓"));
     }
-    acts.append(el("button", { class: "iconbtn", title: "Remove", onclick: () => { f.doc?.free?.(); files.splice(i, 1); renderStage(); } }, "✕"));
-    ul.append(el("li", { class: "file" }, el("div", { class: "fico" }, "PDF"), el("div", { class: "meta" }, el("div", { class: "name", title: f.file.name }, f.file.name), info), acts));
+    acts.append(el("button", { class: "iconbtn", title: "Remove from list", "aria-label": `Remove ${f.file.name}`, onclick: () => { try { f.doc?.free?.(); } catch {} files.splice(i, 1); renderStage(); } }, "✕"));
+    const li = el("li", { class: "file", draggable: opts.reorder ? "true" : null }, el("div", { class: "fico", "aria-hidden": true }, "PDF"), el("div", { class: "meta" }, el("div", { class: "name", title: f.file.name }, f.file.name), info), acts);
+    if (opts.reorder) {
+      li.ondragstart = (e) => { dragFrom = i; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(i)); };
+      li.ondragover = (e) => { if (dragFrom == null) return; e.preventDefault(); e.stopPropagation(); li.classList.add("drag-over"); };
+      li.ondragleave = () => li.classList.remove("drag-over");
+      li.ondrop = (e) => { if (dragFrom == null) return; e.preventDefault(); e.stopPropagation(); const [m] = files.splice(dragFrom, 1); files.splice(i, 0, m); dragFrom = null; renderStage(); };
+    }
+    ul.append(li);
   });
   return ul;
 }
 const ready = () => files.filter((f) => f.doc);
+function summaryLine() {
+  const r = ready(); if (r.length < 2) return null;
+  return el("div", { class: "summary" }, `${plural(r.length, "file")} · ${plural(r.reduce((a, f) => a + f.pages, 0), "page")} · ${kb(r.reduce((a, f) => a + f.bytes.length, 0))} total`);
+}
 
 // ---------------------------------------------------------------- ui bits
-function field(label, input, hint) { return el("label", { class: "field" }, el("span", {}, label), input, hint ? el("span", { class: "hint" }, hint) : null); }
+function field(label, input, hint) { const h = hint == null ? null : (hint.nodeType ? hint : el("span", { class: "hint" }, hint)); return el("label", { class: "field" }, el("span", {}, label), input, h); }
 function check(label, checked, onchange) { const i = el("input", { type: "checkbox" }); i.checked = checked; i.onchange = () => onchange(i.checked); return el("label", { class: "check" }, i, el("span", {}, label)); }
-function segmented(options, value, onchange) {
-  const s = el("div", { class: "seg", role: "group" });
-  const render = () => { s.innerHTML = ""; for (const [v, l] of options) s.append(el("button", { type: "button", class: v === value ? "on" : "", onclick: () => { value = v; onchange(v); render(); } }, l)); };
+function segmented(options, value, onchange, label) {
+  const s = el("div", { class: "seg", role: "group", "aria-label": label });
+  const render = () => { s.innerHTML = ""; for (const [v, l] of options) s.append(el("button", { type: "button", class: v === value ? "on" : "", "aria-pressed": String(v === value), onclick: () => { value = v; onchange(v); render(); } }, l)); };
   render(); return s;
 }
+const ANCHORS = ["top-left", "top-center", "top-right", "center-left", "center", "center-right", "bottom-left", "bottom-center", "bottom-right"];
 function anchorPicker(value, onchange) {
-  const names = ["top-left", "top-center", "top-right", "center-left", "center", "center-right", "bottom-left", "bottom-center", "bottom-right"];
-  const a = el("div", { class: "anchor", role: "group", "aria-label": "Position" });
-  const render = () => { a.innerHTML = ""; for (const n of names) a.append(el("button", { type: "button", class: n === value ? "on" : "", title: n.replace("-", " "), onclick: () => { value = n; onchange(n); render(); } })); };
+  const a = el("div", { class: "anchor", role: "group", "aria-label": "Position on the page" });
+  const render = () => { a.innerHTML = ""; for (const n of ANCHORS) a.append(el("button", { type: "button", class: n === value ? "on" : "", title: n.replace("-", " "), "aria-label": n.replace("-", " "), "aria-pressed": String(n === value), onclick: () => { value = n; onchange(n); render(); } })); };
   render(); return a;
 }
+const COLORS = [["#7a7a7a", [0.48, 0.48, 0.48], "grey"], ["#c0392b", [0.75, 0.22, 0.17], "red"], ["#0b63d6", [0.04, 0.39, 0.84], "blue"], ["#1a7f4b", [0.1, 0.5, 0.29], "green"], ["#111111", [0.07, 0.07, 0.07], "black"]];
 function swatches(value, onchange) {
-  const colors = [["#7a7a7a", [0.48, 0.48, 0.48]], ["#c0392b", [0.75, 0.22, 0.17]], ["#0b63d6", [0.04, 0.39, 0.84]], ["#1a7f4b", [0.1, 0.5, 0.29]], ["#111111", [0.07, 0.07, 0.07]]];
   const w = el("div", { class: "swatches", role: "group", "aria-label": "Colour" });
-  const render = () => { w.innerHTML = ""; for (const [hex, rgb] of colors) w.append(el("button", { type: "button", class: "swatch" + (hex === value ? " on" : ""), style: `background:${hex}`, title: hex, onclick: () => { value = hex; onchange(rgb, hex); render(); } })); };
+  const render = () => { w.innerHTML = ""; for (const [hex, rgb, name] of COLORS) w.append(el("button", { type: "button", class: "swatch" + (hex === value ? " on" : ""), style: `background:${hex}`, title: name, "aria-label": name, "aria-pressed": String(hex === value), onclick: () => { value = hex; onchange(rgb, hex); render(); } })); };
   render(); return w;
 }
-function cta(label, onclick, enabled = true) { const b = el("button", { class: "btn primary", disabled: !enabled, onclick }, label); return el("div", { class: "cta" }, b); }
+function passwordInput(value, oninput, label) {
+  const i = el("input", { type: "password", value, autocomplete: "new-password", "aria-label": label, oninput: (e) => oninput(e.target.value) });
+  const b = el("button", { type: "button", "aria-label": "Show password", onclick: () => { i.type = i.type === "password" ? "text" : "password"; b.textContent = i.type === "password" ? "Show" : "Hide"; } }, "Show");
+  return el("div", { class: "pwfield" }, i, b);
+}
+function cta(label, onclick, enabled = true, why) {
+  const b = el("button", { class: "btn primary", disabled: !enabled, onclick }, label);
+  return el("div", { class: "cta" }, b, !enabled && why ? el("p", { class: "why" }, why) : null);
+}
 function notice(kind, text) { return el("div", { class: "notice " + kind }, text); }
+// Live, plain-English feedback for a page-range input.
+function rangeField(label, value, pageCount, oninput, placeholder = "e.g. 1-3, 5, last") {
+  const hint = el("span", { class: "hint" });
+  const input = el("input", { type: "text", placeholder, value, spellcheck: "false", autocapitalize: "off" });
+  const update = () => {
+    const v = input.value.trim();
+    input.classList.remove("bad"); hint.className = "hint";
+    if (!v) { hint.textContent = pageCount ? `This file has ${plural(pageCount, "page")}. You can also type odd, even, or 4- for “page 4 to the end”.` : ""; return null; }
+    try {
+      const idx = Array.from(parsePageRanges(v, pageCount));
+      if (!idx.length) { hint.textContent = "No pages selected."; return []; }
+      const shown = idx.slice(0, 12).map((i) => i + 1).join(", ") + (idx.length > 12 ? ` … (${idx.length} pages)` : "");
+      hint.textContent = `${plural(idx.length, "page")}: ${shown}`; hint.classList.add("ok");
+      return idx;
+    } catch (e) { hint.textContent = friendly(e); hint.classList.add("bad"); input.classList.add("bad"); return null; }
+  };
+  input.oninput = () => { oninput(input.value); update(); };
+  update();
+  return field(label, input, hint);
+}
 
 // ---------------------------------------------------------------- run + results
+let progressEl = null;
+function setProgress(i, n, name) { if (!progressEl) return; progressEl.bar.classList.add("det"); progressEl.bar.style.width = `${Math.round(100 * i / n)}%`; progressEl.text.textContent = `File ${i} of ${n}: ${name}`; }
 async function runJob(label, work) {
   stage.innerHTML = "";
-  stage.append(el("div", { class: "panel result" }, el("div", { class: "done" }, "⏳"), el("h3", {}, label), el("p", {}, "Working on this device…"), el("div", { class: "progress" }, el("i"))));
-  await sleep(30);
+  const bar = el("i"), text = el("p", {}, "Working on this device…");
+  progressEl = { bar, text };
+  put(el("div", { class: "panel result" }, el("div", { class: "done", "aria-hidden": true }, "⏳"), el("h3", {}, label + "…"), text, el("div", { class: "progress" }, bar)));
+  await sleep(40);
   try {
     const t0 = performance.now();
-    const outs = await work();               // [{name, data, pages, before?}]
+    const outs = await work();
     showResults(outs, Math.round(performance.now() - t0));
   } catch (e) {
     stage.innerHTML = "";
-    stage.append(el("div", { class: "panel result" }, el("div", { class: "done" }, "😕"), el("h3", {}, "That didn't work"), el("p", {}, e.message || String(e)), el("div", { class: "again" }, el("button", { class: "btn", onclick: () => { renderStage(); } }, "Try again"))));
-  }
+    put(el("div", { class: "panel result" }, el("div", { class: "done", "aria-hidden": true }, "😕"), el("h3", {}, "That didn't work"), el("p", {}, friendly(e)), el("div", { class: "again" }, el("button", { class: "btn primary", onclick: () => renderStage() }, "Back to options"))));
+  } finally { progressEl = null; }
 }
 function showResults(outs, ms) {
   stage.innerHTML = "";
   const list = el("div", { class: "outs" });
-  const urls = [];
+  const links = [];
   for (const o of outs) {
-    const url = URL.createObjectURL(new Blob([o.data], { type: "application/pdf" })); urls.push([url, o.name]);
-    const size = o.before != null ? el("div", { class: "info" }, `${o.pages} pages · ${kb(o.before)} → ${kb(o.data.length)} `, el("b", {}, o.before > o.data.length ? `−${Math.round(100 - 100 * o.data.length / o.before)}%` : "already compact"))
-      : el("div", { class: "info" }, `${o.pages} page${o.pages === 1 ? "" : "s"} · ${kb(o.data.length)}`);
-    list.append(el("div", { class: "out" }, el("div", { class: "fico", style: "width:36px;height:44px;border-radius:6px;background:var(--accent-soft);display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--accent)" }, "PDF"), el("div", { class: "meta" }, el("div", { class: "name" }, o.name), size), el("a", { class: "btn", href: url, download: o.name }, "Download")));
+    const url = URL.createObjectURL(new Blob([o.data], { type: "application/pdf" })); links.push([url, o.name]);
+    const size = o.before != null
+      ? el("div", { class: "info" }, `${plural(o.pages, "page")} · ${kb(o.before)} → ${kb(o.data.length)} `, el("b", {}, o.before > o.data.length * 1.02 ? `saved ${Math.round(100 - 100 * o.data.length / o.before)}%` : "already as small as it gets"))
+      : el("div", { class: "info" }, `${plural(o.pages, "page")} · ${kb(o.data.length)}`);
+    list.append(el("div", { class: "out" }, el("div", { class: "fico", "aria-hidden": true }, "PDF"), el("div", { class: "meta" }, el("div", { class: "name", title: o.name }, o.name), size),
+      el("div", { class: "obtns" }, el("a", { class: "btn small", href: url, target: "_blank", rel: "noopener", title: "Open in a new tab" }, "Preview"), el("a", { class: "btn small primary", style: "font-size:14px;padding:8px 14px", href: url, download: o.name }, "Download"))));
   }
   const again = el("div", { class: "again" });
-  if (outs.length > 1) again.append(el("button", { class: "btn primary", onclick: () => { urls.forEach(([u, n], i) => setTimeout(() => { const a = el("a", { href: u, download: n }); document.body.append(a); a.click(); a.remove(); }, i * 250)); } }, `Download all ${outs.length} files`));
-  again.append(el("button", { class: "btn", onclick: () => { files.forEach((f) => f.doc?.free?.()); files = []; renderStage(); } }, "Do another"), el("button", { class: "btn", onclick: home }, "All tools"));
-  stage.append(el("div", { class: "panel result" }, el("div", { class: "done" }, "✅"), el("h3", {}, outs.length === 1 ? "Your file is ready" : `${outs.length} files are ready`), el("p", {}, `Done in ${ms < 1000 ? ms + " ms" : (ms / 1000).toFixed(1) + " s"}, entirely on this device.`), list, again));
+  if (outs.length > 1) again.append(el("button", { class: "btn primary", onclick: () => { links.forEach(([u, n], i) => setTimeout(() => { const a = el("a", { href: u, download: n }); document.body.append(a); a.click(); a.remove(); }, i * 300)); toast(`Downloading ${outs.length} files. Your browser may ask once to allow multiple downloads.`); } }, `Download all ${outs.length} files`));
+  again.append(el("button", { class: "btn", onclick: () => { freeAll(); renderStage(); } }, "Do another"), el("button", { class: "btn", onclick: () => { renderStage(); } }, "Adjust options"), el("button", { class: "btn", onclick: home }, "All tools"));
+  const total = outs.reduce((a, o) => a + o.data.length, 0);
+  put(el("div", { class: "panel result" }, el("div", { class: "done", "aria-hidden": true }, "✅"), el("h3", {}, outs.length === 1 ? "Your file is ready" : `${outs.length} files are ready`), el("p", {}, `Done in ${ms < 1000 ? ms + " ms" : (ms / 1000).toFixed(1) + " s"}, entirely on this device.${outs.length > 1 ? ` ${kb(total)} in total.` : ""}`), list, again));
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
-// Apply fn(doc, entry) to each ready file, save, collect outputs.
-async function perFile(suffix, fn, saveOpts = {}) {
-  const outs = [];
-  for (const f of ready()) {
-    const doc = f.pw ? PdfDocument.loadWithPassword(f.bytes, f.pw) : PdfDocument.load(f.bytes);
-    const r = await fn(doc, f);
-    if (r === false) { doc.free(); continue; }
-    const data = doc.save(saveOpts);
-    outs.push({ name: `${stem(f.file.name)}${suffix}.pdf`, data, pages: doc.pageCount(), before: current.id === "compress" ? f.bytes.length : undefined });
-    doc.free();
+// Apply fn(doc, entry) to every loaded file; save each; collect outputs.
+async function perFile(suffix, fn, saveOpts = {}, opts = {}) {
+  const outs = []; const list = ready(); let n = 0;
+  for (const f of list) {
+    setProgress(++n, list.length, f.file.name);
     await sleep(0);
+    const doc = f.pw ? PdfDocument.loadWithPassword(f.bytes, f.pw) : PdfDocument.load(f.bytes);
+    try {
+      const r = await fn(doc, f);
+      if (r === false) continue;
+      const data = doc.save(saveOpts);
+      outs.push({ name: `${stem(f.file.name)}${suffix}.pdf`, data, pages: doc.pageCount(), before: opts.showSavings ? f.bytes.length : undefined });
+    } finally { doc.free(); }
   }
   if (!outs.length) throw new Error("Nothing to do.");
   return outs;
 }
 
 // ---------------------------------------------------------------- stages
-function renderStage() {
-  stage.innerHTML = "";
-  const fn = STAGES[current.id];
-  fn();
-}
+// Append children to the stage, skipping null/false (DOM append would render the text "null").
+const put = (...nodes) => stage.append(...nodes.filter((x) => x != null && x !== false));
+function renderStage() { stage.innerHTML = ""; STAGES[current.id](); }
+const allOrSpec = (which, custom) => which === "all" ? null : which === "custom" ? custom : which;
+
 const STAGES = {
   merge() {
-    stage.append(dropzone(), fileList({ reorder: true }) ?? el("p", { class: "hint", style: "color:var(--muted);text-align:center;margin-top:12px" }, "Add two or more PDFs. Use the arrows to set the order."));
+    put(dropzone(), fileList({ reorder: true }), summaryLine());
     const n = ready().length;
-    stage.append(cta(n >= 2 ? `Merge ${n} files` : "Merge PDFs", () => runJob("Merging", async () => {
-      const first = ready()[0];
+    if (files.length) put(el("p", { class: "summary" }, "Files are merged top to bottom. Drag a file, or use the arrows, to change the order."));
+    put(cta(n >= 2 ? `Merge ${n} files` : "Merge PDFs", () => runJob("Merging", async () => {
+      const list = ready(); const first = list[0];
       const out = new PdfDocument();
-      for (const f of ready()) { out.importPages(f.doc, null, null); await sleep(0); }
-      out.setMetadata(first.doc.metadata());
-      const data = out.save({}); const pages = out.pageCount(); out.free();
-      return [{ name: (ready().length === 1 ? stem(first.file.name) : stem(first.file.name) + "-merged") + ".pdf", data, pages }];
-    }), n >= 2));
+      try {
+        let i = 0; for (const f of list) { setProgress(++i, list.length, f.file.name); await sleep(0); out.importPages(f.doc, null, null); }
+        out.setMetadata(first.doc.metadata());
+        return [{ name: stem(first.file.name) + "-merged.pdf", data: out.save({}), pages: out.pageCount() }];
+      } finally { out.free(); }
+    }), n >= 2, files.length ? (n === 1 ? "Add at least one more file to merge." : files.some((f) => f.needsPw) ? "Unlock the protected files first, or remove them." : null) : null));
   },
   split() {
-    stage.append(dropzone(), fileList());
-    const f = ready()[0];
-    if (!f) return;
-    const o = (STAGES.split.o ??= { mode: "every", every: 1, ranges: "", extract: "" });
-    const p = el("div", { class: "panel" }, el("h3", {}, "How do you want to split it?"));
-    const modes = el("div", { class: "row" }, segmented([["every", "Into equal parts"], ["ranges", "Custom ranges"], ["extract", "Extract pages"]], o.mode, (v) => { o.mode = v; renderStage(); }));
-    p.append(modes);
-    const detail = el("div", { class: "row", style: "margin-top:14px" });
-    if (o.mode === "every") detail.append(field("Pages per file", el("input", { type: "number", min: 1, max: f.pages, value: o.every, oninput: (e) => (o.every = Math.max(1, +e.target.value || 1)) }), `${f.pages} pages → ${Math.ceil(f.pages / Math.max(1, o.every))} files`));
-    if (o.mode === "ranges") detail.append(field("One range per file, separated by commas", el("input", { type: "text", placeholder: "e.g. 1-3, 4-9, 10-", value: o.ranges, oninput: (e) => (o.ranges = e.target.value) }), "Use “last” for the final page. “10-” means page 10 to the end."));
-    if (o.mode === "extract") detail.append(field("Pages to keep in one new file", el("input", { type: "text", placeholder: "e.g. 1, 4-6, last", value: o.extract, oninput: (e) => (o.extract = e.target.value) }), "Pages appear in the order you list them."));
+    put(dropzone(), fileList());
+    const f = ready()[0]; if (!f) return;
+    const o = pref("split", { mode: "every", every: 1, ranges: "", extract: "" });
+    const p = el("div", { class: "panel" }, el("h3", {}, "How do you want to split it?"), el("div", { class: "row" }, segmented([["every", "Into equal parts"], ["ranges", "Custom ranges"], ["extract", "Extract pages"]], o.mode, (v) => { o.mode = v; renderStage(); }, "Split mode")));
+    const detail = el("div", { class: "row" });
+    if (o.mode === "every") {
+      const hint = el("span", { class: "hint ok" });
+      const upd = () => { const e = Math.max(1, Math.min(f.pages, o.every || 1)); const parts = Math.ceil(f.pages / e); hint.textContent = parts === 1 ? "That's the whole document in one file. Use a smaller number." : `${plural(f.pages, "page")} → ${plural(parts, "file")} of up to ${plural(e, "page")} each`; hint.className = parts === 1 ? "hint bad" : "hint ok"; };
+      detail.append(field("Pages per file", el("input", { type: "number", min: 1, max: f.pages, value: Math.min(o.every, f.pages), oninput: (e) => { o.every = Math.max(1, +e.target.value || 1); upd(); } }), hint)); upd();
+    }
+    if (o.mode === "ranges") detail.append(field("One range per file, separated by commas", el("input", { type: "text", placeholder: "e.g. 1-3, 4-9, 10-", value: o.ranges, spellcheck: "false", oninput: (e) => (o.ranges = e.target.value) }), `This file has ${plural(f.pages, "page")}. “10-” means page 10 to the end; “last” is the final page.`));
+    if (o.mode === "extract") detail.append(rangeField("Pages to keep, in one new file", o.extract, f.pages, (v) => (o.extract = v)));
     p.append(detail);
-    stage.append(p, cta("Split PDF", () => runJob("Splitting", async () => {
+    put(p, cta("Split PDF", () => runJob("Splitting", async () => {
       const outs = [];
-      const make = (spec, i, total) => { const d = PdfDocument.load(f.bytes); d.selectPages(spec); const data = d.save({}); outs.push({ name: `${stem(f.file.name)}-${total > 1 ? i + 1 : "pages"}.pdf`, data, pages: d.pageCount() }); d.free(); };
-      if (o.mode === "every") { const total = Math.ceil(f.pages / o.every); for (let i = 0; i < total; i++) { const a = i * o.every + 1, b = Math.min(f.pages, a + o.every - 1); make(a === b ? `${a}` : `${a}-${b}`, i, total); await sleep(0); } }
+      const make = (spec, i, total) => { const d = PdfDocument.load(f.bytes); try { d.selectPages(spec); outs.push({ name: `${stem(f.file.name)}-${total > 1 ? "part" + (i + 1) : "pages"}.pdf`, data: d.save({}), pages: d.pageCount() }); } finally { d.free(); } };
+      if (o.mode === "every") { const e = Math.max(1, Math.min(f.pages, o.every || 1)); const total = Math.ceil(f.pages / e); if (total < 2) throw new Error("Choose fewer pages per file, otherwise there is nothing to split."); for (let i = 0; i < total; i++) { const a = i * e + 1, b = Math.min(f.pages, a + e - 1); setProgress(i + 1, total, `part ${i + 1}`); await sleep(0); make(a === b ? `${a}` : `${a}-${b}`, i, total); } }
       else if (o.mode === "ranges") { const rs = o.ranges.split(",").map((s) => s.trim()).filter(Boolean); if (!rs.length) throw new Error("Type at least one page range, like 1-3."); rs.forEach((r, i) => make(r, i, rs.length)); }
       else { if (!o.extract.trim()) throw new Error("Type the pages to keep, like 1, 4-6."); make(o.extract, 0, 1); }
       return outs;
     })));
   },
   compress() {
-    stage.append(dropzone(), fileList());
+    put(dropzone(), fileList(), summaryLine());
     if (!ready().length) return;
-    const o = (STAGES.compress.o ??= { level: 6, strip: false });
-    stage.append(el("div", { class: "panel" }, el("h3", {}, "Options"), el("div", { class: "row" },
-      segmented([[6, "Balanced (fast)"], [10, "Smallest (slower)"]], o.level, (v) => (o.level = v)),
-      check("Also remove hidden metadata (author, editing history, thumbnails)", o.strip, (v) => (o.strip = v)))),
-      el("p", { style: "color:var(--muted);font-size:14px;margin:10px 4px 0" }, "Text and vector content is repacked losslessly; scanned pages and photos are kept exactly as they are, so quality never drops."),
-      cta(`Compress ${ready().length > 1 ? ready().length + " files" : "PDF"}`, () => runJob("Compressing", () => perFile("-compressed", () => {}, { compress: true, compressionLevel: o.level, stripMetadata: o.strip }))));
+    const o = pref("compress", { level: 6, strip: false });
+    put(el("div", { class: "panel" }, el("h3", {}, "Options"), el("div", { class: "row" }, segmented([[6, "Balanced (fast)"], [10, "Smallest (slower)"]], o.level, (v) => (o.level = v), "Compression level")), el("div", { class: "row" }, check("Also remove hidden metadata (author, editing history, thumbnails)", o.strip, (v) => (o.strip = v))),
+      el("p", { class: "summary", style: "margin:12px 0 0" }, "Text and graphics are repacked losslessly; scanned pages and photos are kept exactly as they are, so quality never drops. Files that are already tight may not shrink much.")),
+      cta(`Compress ${ready().length > 1 ? plural(ready().length, "file") : "PDF"}`, () => runJob("Compressing", () => perFile("-compressed", () => {}, { compress: true, compressionLevel: o.level, stripMetadata: o.strip }, { showSavings: true }))));
   },
   protect() {
-    stage.append(dropzone(), fileList());
+    put(dropzone(), fileList(), summaryLine());
     if (!ready().length) return;
-    const o = (STAGES.protect.o ??= { user: "", owner: "", copy: true, print: true, modify: true });
-    const u = el("input", { type: "password", autocomplete: "new-password", value: o.user, oninput: (e) => (o.user = e.target.value) });
-    const w = el("input", { type: "password", autocomplete: "new-password", value: o.owner, oninput: (e) => (o.owner = e.target.value) });
-    stage.append(el("div", { class: "panel" }, el("h3", {}, "Password"), el("div", { class: "row" }, field("Password to open the file", u, "Leave empty if anyone may open it but you still want to restrict what they can do."), field("Owner password (optional)", w, "Lets you lift the restrictions later. Defaults to the open password.")),
-      el("h3", { style: "margin-top:18px" }, "What readers may do"), el("div", { class: "row" }, check("Copy text and images", o.copy, (v) => (o.copy = v)), check("Print", o.print, (v) => (o.print = v)), check("Edit or add pages", o.modify, (v) => (o.modify = v))),
-      el("p", { style: "color:var(--muted);font-size:14px;margin:12px 0 0" }, "Uses AES-256 encryption, the current standard that every modern reader supports.")),
+    const o = pref("protect", { copy: true, print: true, modify: true }); o.user ??= ""; o.owner ??= ""; // passwords live only in memory
+    const already = ready().filter((f) => f.enc).length;
+    put(already ? notice("warn", already === 1 ? "This file is already protected. The new password will replace the old one." : `${already} of these files are already protected. New passwords will replace the old ones.`) : null,
+      el("div", { class: "panel" }, el("h3", {}, "Passwords"), el("div", { class: "row" }, field("Password to open the file", passwordInput(o.user, (v) => (o.user = v), "Password to open"), "Leave empty if anyone may open it but you still want to limit what they can do."), field("Owner password (optional)", passwordInput(o.owner, (v) => (o.owner = v), "Owner password"), "Lets you remove the restrictions later. If empty, the open password is used.")),
+        el("h3", { style: "margin-top:18px" }, "What readers may do"), el("div", { class: "row" }, check("Copy text and images", o.copy, (v) => (o.copy = v)), check("Print", o.print, (v) => (o.print = v)), check("Edit, add or remove pages", o.modify, (v) => (o.modify = v))),
+        el("p", { class: "summary", style: "margin:12px 0 0" }, "Uses AES-256, the current standard supported by every modern reader. Note that permissions are honoured by well-behaved readers; only the open password truly keeps the contents private.")),
       cta("Protect PDF", () => runJob("Encrypting", () => { if (!o.user && !o.owner) throw new Error("Enter at least one password."); return perFile("-protected", () => {}, { encryption: { userPassword: o.user, ownerPassword: o.owner, permissions: { copy: o.copy, accessibility: o.copy, print: o.print, printHighQuality: o.print, modify: o.modify, annotate: o.modify, assemble: o.modify, fillForms: o.modify } } }); })));
   },
   unlock() {
-    stage.append(dropzone(), fileList());
+    put(dropzone(), fileList(), summaryLine());
     const locked = files.filter((f) => f.needsPw);
-    if (locked.length) stage.append(notice("warn", "Type the password next to each locked file (press Enter), then unlock."));
+    if (locked.length) put(notice("warn", locked.length === 1 ? "Type the password for the locked file and press Unlock." : "Type the password next to each locked file and press Unlock."));
     if (!ready().length) return;
     const n = ready().filter((f) => f.enc).length;
-    if (!n) stage.append(notice("warn", "These files aren't password protected, so there's nothing to unlock."));
-    stage.append(cta("Remove protection", () => runJob("Unlocking", () => perFile("-unlocked", (doc, f) => f.enc ? undefined : false, {})), n > 0));
+    const restricted = ready().filter((f) => f.enc && !f.doc.hasOwnerAccess?.()).length;
+    if (!n) put(notice("warn", ready().length === 1 ? "This file isn't password protected, so there's nothing to remove." : "None of these files are password protected."));
+    else put(notice("ok", n === 1 ? "Ready. The saved copy will open without a password and without restrictions." : `Ready. ${n} protected ${n === 1 ? "file" : "files"} will be saved without passwords or restrictions.`));
+    void restricted;
+    put(cta("Remove protection", () => runJob("Unlocking", () => perFile("-unlocked", (doc, f) => (f.enc ? undefined : false), {})), n > 0, n ? null : "Add a protected file first."));
   },
   rotate() {
-    stage.append(dropzone(), fileList());
+    put(dropzone(), fileList(), summaryLine());
     if (!ready().length) return;
-    const o = (STAGES.rotate.o ??= { deg: 90, which: "all", custom: "" });
-    const pgs = el("div", { class: "row", style: "margin-top:14px" }, segmented([["all", "All pages"], ["odd", "Odd pages"], ["even", "Even pages"], ["custom", "Specific pages"]], o.which, (v) => { o.which = v; renderStage(); }));
-    if (o.which === "custom") pgs.append(field("Pages", el("input", { type: "text", placeholder: "e.g. 1, 3-5, last", value: o.custom, oninput: (e) => (o.custom = e.target.value) })));
-    stage.append(el("div", { class: "panel" }, el("h3", {}, "Rotate"), el("div", { class: "row" }, segmented([[90, "↻ 90° right"], [180, "180°"], [270, "↺ 90° left"]], o.deg, (v) => (o.deg = v))), pgs),
-      cta("Rotate PDF", () => runJob("Rotating", () => perFile("-rotated", (doc) => { doc.rotatePages(o.which === "all" ? null : o.which === "custom" ? o.custom : o.which, o.deg); }))));
+    const o = pref("rotate", { deg: 90, which: "all", custom: "" });
+    const single = ready().length === 1 ? ready()[0] : null;
+    const pgs = el("div", { class: "row" }, field("Which pages", segmented([["all", "All pages"], ["odd", "Odd pages"], ["even", "Even pages"], ["custom", "Specific pages"]], o.which, (v) => { o.which = v; renderStage(); }, "Which pages")));
+    if (o.which === "custom") pgs.append(rangeField("Pages", o.custom, single ? single.pages : 0, (v) => (o.custom = v)));
+    put(el("div", { class: "panel" }, el("h3", {}, "Rotate"), el("div", { class: "row" }, field("Direction", segmented([[90, "↻ 90° clockwise"], [180, "180°"], [270, "↺ 90° anticlockwise"]], o.deg, (v) => (o.deg = v), "Rotation"))), pgs),
+      cta("Rotate PDF", () => runJob("Rotating", () => { if (o.which === "custom" && !o.custom.trim()) throw new Error("Type which pages to rotate, like 1, 3-5."); return perFile("-rotated", (doc) => { doc.rotatePages(allOrSpec(o.which, o.custom), o.deg); }); })));
   },
   delete() {
-    stage.append(dropzone(), fileList());
+    put(dropzone(), fileList());
     const f = ready()[0]; if (!f) return;
-    const o = (STAGES.delete.o ??= { pages: "" });
-    stage.append(el("div", { class: "panel" }, el("h3", {}, "Which pages should go?"), el("div", { class: "row" }, field(`Pages to delete (this file has ${f.pages})`, el("input", { type: "text", placeholder: "e.g. 2, 5-7, last", value: o.pages, oninput: (e) => (o.pages = e.target.value) }), "Tip: “even” or “odd” work too."))),
-      cta("Delete pages", () => runJob("Removing pages", () => { if (!o.pages.trim()) throw new Error("Type the pages to delete, like 2, 5-7."); return perFile("-edited", (doc) => { doc.deletePages(o.pages); if (doc.pageCount() === 0) throw new Error("That would delete every page."); }); })));
+    const o = { pages: STAGES.delete.last ?? "" };
+    put(el("div", { class: "panel" }, el("h3", {}, "Which pages should go?"), el("div", { class: "row" }, rangeField("Pages to delete", o.pages, f.pages, (v) => { o.pages = v; STAGES.delete.last = v; }, "e.g. 2, 5-7, last"))),
+      cta("Delete pages", () => runJob("Removing pages", () => {
+        if (!o.pages.trim()) throw new Error("Type the pages to delete, like 2, 5-7.");
+        const idx = Array.from(parsePageRanges(o.pages, f.pages));
+        if (new Set(idx).size >= f.pages) throw new Error("That would delete every page. Keep at least one.");
+        return perFile("-edited", (doc) => { doc.deletePages(o.pages); });
+      })));
   },
   organize() {
-    stage.append(dropzone(), fileList());
+    put(dropzone(), fileList());
     const f = ready()[0]; if (!f) return;
     if (!STAGES.organize.o || STAGES.organize.o.for !== f) STAGES.organize.o = { for: f, tiles: f.doc.pages().map((p, i) => ({ src: i, rot: 0, del: false, w: p.mediaBox.x1 - p.mediaBox.x0, h: p.mediaBox.y1 - p.mediaBox.y0, swap: p.rotation === "90" || p.rotation === "270" })) };
     const o = STAGES.organize.o;
-    const grid = el("div", { class: "tiles" });
+    const grid = el("div", { class: "tiles", role: "list", "aria-label": "Pages" });
     let dragFrom = null;
+    const move = (from, to) => { if (to < 0 || to >= o.tiles.length) return; const [m] = o.tiles.splice(from, 1); o.tiles.splice(to, 0, m); renderStage(); };
     o.tiles.forEach((t, i) => {
       const [w, h] = t.swap ? [t.h, t.w] : [t.w, t.h];
       const scale = 72 / Math.max(w, h);
       const pg = el("div", { class: "pg", style: `width:${Math.round(w * scale)}px;height:${Math.round(h * scale)}px;transform:rotate(${t.rot}deg)` }, String(t.src + 1));
-      const tile = el("div", { class: "tile" + (t.del ? " deleted" : ""), draggable: true }, pg, el("div", { class: "num" }, `Page ${t.src + 1}${t.rot ? ` · ${t.rot}°` : ""}`),
-        el("div", { class: "tacts" }, el("button", { class: "iconbtn", title: "Rotate", onclick: () => { t.rot = (t.rot + 90) % 360; renderStage(); } }, "↻"), el("button", { class: "iconbtn", title: t.del ? "Restore" : "Remove", onclick: () => { t.del = !t.del; renderStage(); } }, t.del ? "↩" : "✕")));
-      tile.ondragstart = (e) => { dragFrom = i; tile.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; };
+      const tile = el("div", { class: "tile" + (t.del ? " deleted" : ""), draggable: "true", role: "listitem", "aria-label": `Page ${t.src + 1}${t.rot ? `, rotated ${t.rot} degrees` : ""}${t.del ? ", removed" : ""}` }, pg, el("div", { class: "num" }, t.del ? "Removed" : `Page ${t.src + 1}${t.rot ? ` · ${t.rot}°` : ""}`),
+        el("div", { class: "tacts" },
+          el("button", { class: "iconbtn", title: "Move left", "aria-label": "Move left", disabled: i === 0, onclick: () => move(i, i - 1) }, "◀"),
+          el("button", { class: "iconbtn", title: "Rotate", "aria-label": "Rotate 90 degrees", onclick: () => { t.rot = (t.rot + 90) % 360; renderStage(); } }, "↻"),
+          el("button", { class: "iconbtn", title: t.del ? "Restore" : "Remove", "aria-label": t.del ? "Restore page" : "Remove page", onclick: () => { t.del = !t.del; renderStage(); } }, t.del ? "↩" : "✕"),
+          el("button", { class: "iconbtn", title: "Move right", "aria-label": "Move right", disabled: i === o.tiles.length - 1, onclick: () => move(i, i + 1) }, "▶")));
+      tile.ondragstart = (e) => { dragFrom = i; tile.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(i)); };
       tile.ondragend = () => tile.classList.remove("dragging");
-      tile.ondragover = (e) => { e.preventDefault(); tile.classList.add("over"); };
+      tile.ondragover = (e) => { if (dragFrom == null) return; e.preventDefault(); e.stopPropagation(); tile.classList.add("over"); };
       tile.ondragleave = () => tile.classList.remove("over");
-      tile.ondrop = (e) => { e.preventDefault(); if (dragFrom == null || dragFrom === i) return; const [m] = o.tiles.splice(dragFrom, 1); o.tiles.splice(i, 0, m); renderStage(); };
+      tile.ondrop = (e) => { if (dragFrom == null) return; e.preventDefault(); e.stopPropagation(); if (dragFrom !== i) move(dragFrom, i); dragFrom = null; };
       grid.append(tile);
     });
     const keep = o.tiles.filter((t) => !t.del);
-    stage.append(el("div", { class: "panel" }, el("h3", {}, "Drag pages to reorder. Use the buttons to rotate or remove."), grid, el("div", { class: "row", style: "margin-top:12px" }, el("button", { class: "btn", onclick: () => { o.tiles.reverse(); renderStage(); } }, "Reverse order"), el("button", { class: "btn", onclick: () => { STAGES.organize.o = null; renderStage(); } }, "Reset"))),
-      cta(`Save ${keep.length} page${keep.length === 1 ? "" : "s"}`, () => runJob("Rebuilding", () => perFile("-organized", (doc) => {
+    const changed = o.tiles.some((t, i) => t.src !== i || t.rot || t.del);
+    put(el("div", { class: "panel" }, el("h3", {}, "Drag pages into order. Rotate or remove with the buttons under each page."), grid,
+      el("div", { class: "row", style: "margin-top:14px" }, el("button", { class: "btn small", onclick: () => { o.tiles.reverse(); renderStage(); } }, "Reverse order"), el("button", { class: "btn small", onclick: () => { o.tiles.forEach((t) => (t.rot = (t.rot + 90) % 360)); renderStage(); } }, "Rotate all"), el("button", { class: "btn small", onclick: () => { STAGES.organize.o = null; renderStage(); } }, "Start over"))),
+      cta(keep.length === o.tiles.length ? `Save ${plural(keep.length, "page")}` : `Save ${keep.length} of ${plural(o.tiles.length, "page")}`, () => runJob("Rebuilding", () => perFile("-organized", (doc) => {
         doc.selectPages(keep.map((t) => t.src + 1).join(","));
         keep.forEach((t, k) => { if (t.rot) doc.rotatePages(String(k + 1), t.rot); });
-      })), keep.length > 0));
+      })), keep.length > 0 && changed, keep.length === 0 ? "Keep at least one page." : !changed ? "Nothing has changed yet." : null));
   },
   watermark() {
-    stage.append(dropzone(), fileList());
+    put(dropzone(), fileList(), summaryLine());
     if (!ready().length) return;
-    const o = (STAGES.watermark.o ??= { kind: "text", text: "DRAFT", size: 72, opacity: 0.3, rotation: 45, color: [0.48, 0.48, 0.48], hex: "#7a7a7a", pos: "center", img: null, imgName: "", width: 120, under: false });
-    const p = el("div", { class: "panel" }, el("h3", {}, "Watermark"), el("div", { class: "row" }, segmented([["text", "Text"], ["image", "Logo or image"]], o.kind, (v) => { o.kind = v; renderStage(); })));
+    const o = pref("watermark", { kind: "text", text: "DRAFT", size: 72, opacity: 0.3, rotation: 45, color: [0.48, 0.48, 0.48], hex: "#7a7a7a", pos: "center", width: 120, under: false, which: "all", custom: "" });
+    o.img ??= STAGES.watermark.img ?? null; o.imgName ??= STAGES.watermark.imgName ?? "";
+    const pv = el("div", { class: "preview", "aria-hidden": true }, el("div", { class: "lines" }));
+    const wm = el("div", { class: "wm" });
+    pv.append(wm);
+    const updatePreview = () => {
+      const [ax, ay] = { "top-left": [8, 8], "top-center": [50, 8], "top-right": [92, 8], "center-left": [8, 50], center: [50, 50], "center-right": [92, 50], "bottom-left": [8, 92], "bottom-center": [50, 92], "bottom-right": [92, 92] }[o.pos];
+      const tx = ax < 50 ? "0%" : ax > 50 ? "-100%" : "-50%", ty = ay < 50 ? "0%" : ay > 50 ? "-100%" : "-50%";
+      wm.style.left = ax + "%"; wm.style.top = ay + "%"; wm.style.opacity = o.opacity;
+      if (o.kind === "text") { wm.textContent = o.text.replace("{page}", "1").replace("{pages}", "9") || " "; wm.style.color = o.hex; wm.style.fontSize = Math.max(6, o.size / 4.5) + "px"; wm.style.transform = `translate(${tx}, ${ty}) rotate(${-o.rotation}deg)`; wm.style.background = ""; wm.style.width = ""; wm.style.height = ""; }
+      else { wm.textContent = ""; wm.style.background = o.img ? "var(--accent)" : "#ccc"; wm.style.width = Math.min(110, o.width / 4.5) + "px"; wm.style.height = Math.min(110, o.width / 4.5) * 0.6 + "px"; wm.style.borderRadius = "3px"; wm.style.transform = `translate(${tx}, ${ty})`; }
+    };
+    const p = el("div", { class: "panel" }, el("h3", {}, "Watermark"), el("div", { class: "row" }, field("Type", segmented([["text", "Text"], ["image", "Logo or image"]], o.kind, (v) => { o.kind = v; renderStage(); }, "Watermark type"))));
+    const controls = el("div", { style: "flex:1;min-width:0" });
     if (o.kind === "text") {
-      p.append(el("div", { class: "row", style: "margin-top:14px" }, field("Text", el("input", { type: "text", value: o.text, oninput: (e) => (o.text = e.target.value) }), "{page} and {pages} become the page number and total"), field("Size", el("input", { type: "range", min: 12, max: 160, value: o.size, oninput: (e) => (o.size = +e.target.value) })), field("Opacity", el("input", { type: "range", min: 0.05, max: 1, step: 0.05, value: o.opacity, oninput: (e) => (o.opacity = +e.target.value) }))),
-        el("div", { class: "row", style: "margin-top:14px" }, field("Angle", segmented([[0, "Straight"], [45, "Diagonal"], [90, "Vertical"]], o.rotation, (v) => (o.rotation = v))), field("Colour", swatches(o.hex, (rgb, hex) => { o.color = rgb; o.hex = hex; })), field("Position", anchorPicker(o.pos, (v) => (o.pos = v)))));
+      controls.append(el("div", { class: "row" }, field("Text", el("input", { type: "text", value: o.text, maxlength: 80, oninput: (e) => { o.text = e.target.value; updatePreview(); } }), "Tip: {page} and {pages} become the page number and total."), field(`Size`, el("input", { type: "range", min: 12, max: 160, value: o.size, "aria-label": "Text size", oninput: (e) => { o.size = +e.target.value; updatePreview(); } })), field("Opacity", el("input", { type: "range", min: 0.05, max: 1, step: 0.05, value: o.opacity, "aria-label": "Opacity", oninput: (e) => { o.opacity = +e.target.value; updatePreview(); } }))),
+        el("div", { class: "row" }, field("Angle", segmented([[0, "Straight"], [45, "Diagonal"], [90, "Vertical"]], o.rotation, (v) => { o.rotation = v; updatePreview(); }, "Angle")), field("Colour", swatches(o.hex, (rgb, hex) => { o.color = rgb; o.hex = hex; updatePreview(); })), field("Position", anchorPicker(o.pos, (v) => { o.pos = v; updatePreview(); }))));
     } else {
-      const pick = el("button", { class: "btn", onclick: () => { $("#imgpicker").value = ""; $("#imgpicker").onchange = async (e) => { const f = e.target.files[0]; if (!f) return; o.img = new Uint8Array(await f.arrayBuffer()); o.imgName = f.name; renderStage(); }; $("#imgpicker").click(); } }, o.img ? `Change image (${o.imgName})` : "Choose PNG or JPEG");
-      p.append(el("div", { class: "row", style: "margin-top:14px" }, field("Image", pick, "PNG transparency is kept."), field("Width on page (points; 72 = 1 inch)", el("input", { type: "number", min: 10, max: 2000, value: o.width, oninput: (e) => (o.width = +e.target.value) })), field("Opacity", el("input", { type: "range", min: 0.05, max: 1, step: 0.05, value: o.opacity, oninput: (e) => (o.opacity = +e.target.value) })), field("Position", anchorPicker(o.pos, (v) => (o.pos = v)))));
+      const pick = el("button", { class: "btn", onclick: () => { $("#imgpicker").value = ""; $("#imgpicker").onchange = async (e) => { const f = e.target.files[0]; if (!f) return; STAGES.watermark.img = new Uint8Array(await f.arrayBuffer()); STAGES.watermark.imgName = f.name; o.img = STAGES.watermark.img; o.imgName = f.name; renderStage(); }; $("#imgpicker").click(); } }, o.img ? `Change image (${o.imgName})` : "Choose a PNG or JPEG");
+      controls.append(el("div", { class: "row" }, field("Image", pick, "PNG transparency is kept."), field("Width on the page", el("input", { type: "range", min: 30, max: 600, value: o.width, "aria-label": "Image width", oninput: (e) => { o.width = +e.target.value; updatePreview(); } }), "Drag right for larger. 72 = one inch."), field("Opacity", el("input", { type: "range", min: 0.05, max: 1, step: 0.05, value: o.opacity, "aria-label": "Opacity", oninput: (e) => { o.opacity = +e.target.value; updatePreview(); } }))),
+        el("div", { class: "row" }, field("Position", anchorPicker(o.pos, (v) => { o.pos = v; updatePreview(); }))));
     }
-    p.append(el("div", { class: "row", style: "margin-top:8px" }, check("Place behind the page content instead of on top", o.under, (v) => (o.under = v))));
-    stage.append(p, cta("Add watermark", () => runJob("Stamping", () => perFile("-watermarked", (doc) => {
-      if (o.kind === "text") { if (!o.text.trim()) throw new Error("Type the watermark text."); doc.stampText(null, { text: o.text, size: o.size, opacity: o.opacity, rotation: o.rotation, color: o.color, position: o.pos, under: o.under }); }
-      else { if (!o.img) throw new Error("Choose an image first."); doc.stampImage(null, o.img, { width: o.width, opacity: o.opacity, position: o.pos, under: o.under }); }
+    const single = ready().length === 1 ? ready()[0] : null;
+    const pgs = el("div", { class: "row" }, field("Which pages", segmented([["all", "All pages"], ["first", "First page only"], ["custom", "Specific pages"]], o.which, (v) => { o.which = v; renderStage(); }, "Which pages")));
+    if (o.which === "custom") pgs.append(rangeField("Pages", o.custom, single ? single.pages : 0, (v) => (o.custom = v)));
+    controls.append(pgs, el("div", { class: "row" }, check("Place behind the page content instead of on top", o.under, (v) => (o.under = v))));
+    p.append(el("div", { class: "row", style: "margin-top:14px;flex-wrap:nowrap;align-items:flex-start" }, controls, pv));
+    updatePreview();
+    put(p, cta("Add watermark", () => runJob("Stamping", () => perFile("-watermarked", (doc) => {
+      const spec = o.which === "all" ? null : o.which === "first" ? "1" : o.custom;
+      if (o.which === "custom" && !o.custom.trim()) throw new Error("Type which pages to stamp, like 1, 3-5.");
+      if (o.kind === "text") { if (!o.text.trim()) throw new Error("Type the watermark text."); doc.stampText(spec, { text: o.text, size: o.size, opacity: o.opacity, rotation: o.rotation, color: o.color, position: o.pos, under: o.under }); }
+      else { if (!o.img) throw new Error("Choose an image first."); doc.stampImage(spec, o.img, { width: o.width, opacity: o.opacity, position: o.pos, under: o.under }); }
     }))));
   },
   numbers() {
-    stage.append(dropzone(), fileList());
+    put(dropzone(), fileList(), summaryLine());
     if (!ready().length) return;
-    const o = (STAGES.numbers.o ??= { format: "{page} / {pages}", pos: "bottom-center", size: 10, start: 1 });
-    stage.append(el("div", { class: "panel" }, el("h3", {}, "Page numbers"), el("div", { class: "row" }, field("Style", segmented([["{page}", "1"], ["{page} / {pages}", "1 / 12"], ["Page {page} of {pages}", "Page 1 of 12"], ["- {page} -", "- 1 -"]], o.format, (v) => (o.format = v))), field("Position", anchorPicker(o.pos, (v) => (o.pos = v))), field("Size", el("input", { type: "number", min: 6, max: 36, value: o.size, oninput: (e) => (o.size = +e.target.value) })), field("Start counting at", el("input", { type: "number", min: 0, value: o.start, oninput: (e) => (o.start = +e.target.value) })))),
-      cta("Add page numbers", () => runJob("Numbering", () => perFile("-numbered", (doc) => { doc.addPageNumbers(null, { format: o.format, position: o.pos, size: o.size, startAt: o.start }); }))));
+    const o = pref("numbers", { format: "{page} / {pages}", pos: "bottom-center", size: 10, start: 1, which: "all", custom: "" });
+    const single = ready().length === 1 ? ready()[0] : null;
+    const pv = el("div", { class: "preview", "aria-hidden": true }, el("div", { class: "lines" }));
+    const wm = el("div", { class: "wm", style: "font-weight:500" }); pv.append(wm);
+    const updatePreview = () => {
+      const [ax, ay] = { "top-left": [8, 5], "top-center": [50, 5], "top-right": [92, 5], "center-left": [8, 50], center: [50, 50], "center-right": [92, 50], "bottom-left": [8, 95], "bottom-center": [50, 95], "bottom-right": [92, 95] }[o.pos];
+      wm.style.left = ax + "%"; wm.style.top = ay + "%"; wm.style.transform = `translate(${ax < 50 ? "0%" : ax > 50 ? "-100%" : "-50%"}, ${ay < 50 ? "0%" : ay > 50 ? "-100%" : "-50%"})`;
+      wm.style.fontSize = Math.max(6, o.size / 1.6) + "px"; wm.style.color = "#333";
+      wm.textContent = o.format.replace("{page}", String(o.start)).replace("{pages}", String(o.start + (single ? single.pages : 9) - 1));
+    };
+    const pgs = el("div", { class: "row" }, field("Which pages", segmented([["all", "All pages"], ["skipfirst", "All except the first"], ["custom", "Specific pages"]], o.which, (v) => { o.which = v; renderStage(); }, "Which pages")));
+    if (o.which === "custom") pgs.append(rangeField("Pages", o.custom, single ? single.pages : 0, (v) => (o.custom = v)));
+    const controls = el("div", { style: "flex:1;min-width:0" },
+      el("div", { class: "row" }, field("Style", segmented([["{page}", "1"], ["{page} / {pages}", "1 / 12"], ["Page {page} of {pages}", "Page 1 of 12"], ["- {page} -", "- 1 -"]], o.format, (v) => { o.format = v; updatePreview(); }, "Number style")), field("Position", anchorPicker(o.pos, (v) => { o.pos = v; updatePreview(); }))),
+      el("div", { class: "row" }, field("Size", el("input", { type: "number", min: 6, max: 36, value: o.size, oninput: (e) => { o.size = Math.min(36, Math.max(6, +e.target.value || 10)); updatePreview(); } })), field("First number", el("input", { type: "number", min: 0, value: o.start, oninput: (e) => { o.start = Math.max(0, +e.target.value || 0); updatePreview(); } }), "Useful when a cover page shouldn't count.")),
+      pgs);
+    updatePreview();
+    put(el("div", { class: "panel" }, el("h3", {}, "Page numbers"), el("div", { class: "row", style: "flex-wrap:nowrap;align-items:flex-start" }, controls, pv)),
+      cta("Add page numbers", () => runJob("Numbering", () => perFile("-numbered", (doc) => {
+        const n = doc.pageCount();
+        const spec = o.which === "all" ? null : o.which === "skipfirst" ? (n > 1 ? "2-" : null) : o.custom;
+        if (o.which === "custom" && !o.custom.trim()) throw new Error("Type which pages to number, like 2-.");
+        if (o.which === "skipfirst" && n === 1) return false;
+        doc.addPageNumbers(spec, { format: o.format, position: o.pos, size: o.size, startAt: o.start });
+      }))));
   },
   info() {
-    stage.append(dropzone(), fileList());
-    const f = ready()[0]; if (!f) return;
+    put(dropzone(), fileList(), summaryLine());
+    const list = ready(); const f = list[0]; if (!f) return;
     const m = f.doc.metadata();
     const o = (STAGES.info.o ??= {}); if (o.for !== f) Object.assign(o, { for: f, title: m.title ?? "", author: m.author ?? "", subject: m.subject ?? "", keywords: m.keywords ?? "", strip: false });
-    const inp = (k) => el("input", { type: "text", value: o[k], oninput: (e) => (o[k] = e.target.value) });
-    stage.append(el("div", { class: "panel" }, el("h3", {}, "Document information"), el("div", { class: "row" }, field("Title", inp("title")), field("Author", inp("author"))), el("div", { class: "row", style: "margin-top:12px" }, field("Subject", inp("subject")), field("Keywords", inp("keywords"))),
-      el("div", { class: "row", style: "margin-top:12px" }, check("Wipe all hidden metadata first (creator app, dates, XMP, thumbnails)", o.strip, (v) => (o.strip = v))),
-      m.creator || m.producer ? el("p", { style: "color:var(--muted);font-size:14px;margin:10px 0 0" }, `Currently: created with ${m.creator || "unknown"}, produced by ${m.producer || "unknown"}.`) : null),
+    const inp = (k, ph) => el("input", { type: "text", value: o[k], placeholder: ph, oninput: (e) => (o[k] = e.target.value) });
+    put(el("div", { class: "panel" }, el("h3", {}, list.length > 1 ? `Document information (applied to all ${list.length} files; fields shown are from ${f.file.name})` : "Document information"),
+      el("div", { class: "row" }, field("Title", inp("title", "Untitled")), field("Author", inp("author", ""))), el("div", { class: "row" }, field("Subject", inp("subject", "")), field("Keywords", inp("keywords", "comma, separated"))),
+      el("div", { class: "row" }, check("Wipe all hidden metadata first (creating app, dates, XMP, thumbnails)", o.strip, (v) => (o.strip = v))),
+      (m.creator || m.producer) ? el("p", { class: "summary", style: "margin:10px 0 0" }, `Currently: created with ${m.creator || "an unknown app"}, produced by ${m.producer || "an unknown library"}.`) : null,
+      el("p", { class: "summary", style: "margin:6px 0 0" }, "Clearing a field removes it from the file.")),
       cta("Save changes", () => runJob("Updating", () => perFile("-edited", (doc) => { if (o.strip) doc.stripMetadata(); doc.setMetadata({ title: o.title, author: o.author, subject: o.subject, keywords: o.keywords }); }, { stripMetadata: false }))));
   },
   batch() {
-    stage.append(dropzone(), fileList());
+    put(dropzone(), fileList(), summaryLine());
     const KEY = "foliopdf.presets";
     let store; try { const j = localStorage.getItem(KEY); store = j ? PresetStore.fromJson(j) : PresetStore.withBuiltins(); } catch { store = PresetStore.withBuiltins(); }
     const o = (STAGES.batch.o ??= { name: store.names()[0], json: "" });
+    if (!store.names().includes(o.name)) o.name = store.names()[0];
     const persist = () => { try { localStorage.setItem(KEY, store.toJson()); } catch {} };
-    const sel = el("select", { onchange: (e) => { o.name = e.target.value; o.json = ""; renderStage(); } });
+    const sel = el("select", { "aria-label": "Saved presets", onchange: (e) => { o.name = e.target.value; o.json = ""; renderStage(); } });
     for (const n of store.names()) sel.append(el("option", { selected: n === o.name }, n));
     const preset = store.get(o.name);
-    const ta = el("textarea", { rows: 12, style: "font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; width:100%", oninput: (e) => (o.json = e.target.value) }, o.json || JSON.stringify(preset ?? {}, null, 2));
+    const ta = el("textarea", { rows: 12, spellcheck: "false", style: "font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; width:100%", "aria-label": "Preset JSON", oninput: (e) => (o.json = e.target.value) }, o.json || JSON.stringify(preset ?? {}, null, 2));
     const getPreset = () => { try { return JSON.parse(ta.value); } catch (e) { throw new Error("The preset isn't valid JSON: " + e.message); } };
-    stage.append(el("div", { class: "panel" }, el("h3", {}, "Presets are recipes: a list of steps plus output settings, saved as JSON in this browser"),
-      el("div", { class: "row" }, field("Saved presets", sel), el("button", { class: "btn", onclick: () => { const p = getPreset(); store.add(p); persist(); o.name = p.name; o.json = ""; renderStage(); } }, "Save"), el("button", { class: "btn", onclick: () => { store.remove(o.name); persist(); o.name = store.names()[0]; o.json = ""; renderStage(); } }, "Delete"), el("a", { class: "btn", href: "https://github.com/keithadler/foliopdf/blob/main/docs/presets.md", target: "_blank", rel: "noopener" }, "Step reference")),
+    put(el("div", { class: "panel" }, el("h3", {}, "A preset is a recipe: a list of steps plus output settings, saved as JSON in this browser."),
+      el("div", { class: "row", style: "align-items:flex-end" }, field("Saved presets", sel), el("button", { class: "btn", onclick: () => { try { const p = getPreset(); store.add(p); persist(); o.name = p.name; o.json = ""; renderStage(); toast(`Saved “${p.name}”.`); } catch (e) { toast(friendly(e)); } } }, "Save"), el("button", { class: "btn", onclick: () => { if (!confirm(`Delete the preset “${o.name}”?`)) return; store.remove(o.name); persist(); o.name = store.names()[0]; o.json = ""; renderStage(); } }, "Delete"), el("a", { class: "btn", href: "https://github.com/keithadler/foliopdf/blob/main/docs/presets.md", target: "_blank", rel: "noopener" }, "Step reference ↗")),
       el("div", { style: "margin-top:12px" }, ta),
-      el("p", { style: "color:var(--muted);font-size:14px;margin:8px 0 0" }, "The same JSON runs unchanged with the folio command-line tool, so what you design here can run on a server or in a script.")),
-      cta(`Run on ${ready().length} file${ready().length === 1 ? "" : "s"}`, () => runJob("Running preset", async () => {
+      el("p", { class: "summary", style: "margin:8px 0 0" }, "The same JSON runs unchanged with the folio command-line tool, so a recipe designed here can run in a script or on a server.")),
+      cta(`Run on ${plural(ready().length, "file")}`, () => runJob("Running preset", async () => {
         const p = getPreset();
         const r = runBatch(p, ready().map((f) => ({ name: f.file.name, data: f.bytes, password: f.pw || undefined })), []);
-        if (r.warnings.length) console.warn(r.warnings);
+        if (r.warnings.length) toast(r.warnings[0]);
         return r.outputs.map((x) => ({ name: x.name, data: x.data, pages: x.pages }));
-      }), ready().length > 0));
+      }), ready().length > 0, files.length ? null : "Add files first."));
   },
 };
+
+// Route last, once every tool is defined, so deep links like #merge work on a cold load.
+route();
 </script>
 </body>
 </html>
