@@ -127,5 +127,8 @@ cargo install wasm-pack
 node examples/node/smoke.mjs  # sanity check
 ```
 
-`examples/web/index.html` is a drop-a-file demo; serve the repo root with any
-static server (`python3 -m http.server`) and open it.
+`examples/web/index.html` is the complete web app (merge, split, compress,
+protect, unlock, rotate, organize, watermark, page numbers, info, batch).
+Serve the repo root with any static server (`python3 -m http.server 8765`)
+and open `/examples/web/`. It is a single file with no build step; copy it
+next to `pkg/` to host it anywhere.

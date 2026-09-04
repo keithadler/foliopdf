@@ -142,7 +142,7 @@ the input size. WebAssembly runs at roughly half native speed.
 crates/foliopdf        core library (parser, writer, crypto, fonts, ops, batch)
 crates/foliopdf-wasm   wasm-bindgen bindings + TypeScript types
 crates/foliopdf-cli    the `folio` binary
-examples/web           drop-a-file browser demo
+examples/web           the free web app (every tool, runs entirely in the browser)
 examples/node          Node smoke test for the npm package
 docs/                  guides
 ```

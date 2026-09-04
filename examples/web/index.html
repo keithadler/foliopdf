@@ -3,164 +3,541 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>foliopdf demo</title>
+<title>foliopdf — free PDF tools that stay on your device</title>
+<meta name="description" content="Merge, split, compress, protect, unlock, rotate, watermark and number PDFs in your browser. Free, open source, and nothing is uploaded.">
 <style>
-  :root { color-scheme: light dark; font: 15px/1.45 system-ui, sans-serif; }
-  body { max-width: 860px; margin: 2rem auto; padding: 0 1rem; }
-  h1 { font-size: 1.5rem; margin: 0 0 .25rem; }
-  .sub { opacity: .7; margin: 0 0 1.5rem; }
-  #drop { border: 2px dashed #8884; border-radius: 12px; padding: 2rem; text-align: center; cursor: pointer; }
-  #drop.over { border-color: #06c; background: #06c11d; }
-  fieldset { border: 1px solid #8884; border-radius: 8px; margin: 1rem 0; }
-  label { display: inline-block; margin: .25rem 1rem .25rem 0; }
-  input[type=text], input[type=number], select { padding: .3rem .4rem; }
-  button { padding: .5rem 1rem; border-radius: 8px; border: 1px solid #8886; cursor: pointer; }
-  button.primary { background: #06c; color: #fff; border-color: #06c; }
-  #files li { margin: .2rem 0; }
-  #out { margin-top: 1rem; }
-  #out a { display: block; margin: .3rem 0; }
-  pre { background: #8881; padding: .75rem; border-radius: 8px; overflow: auto; font-size: 13px; }
-  .warn { color: #b60; }
-  .err { color: #c22; }
+  :root {
+    --bg: #f6f7f9; --card: #fff; --ink: #14171f; --muted: #5c6470; --line: #e3e6ea;
+    --accent: #0b63d6; --accent-ink: #fff; --accent-soft: #e6f0fd; --ok: #1a7f4b; --warn: #a15c00; --err: #c0392b;
+    --radius: 14px; --shadow: 0 1px 2px rgba(0,0,0,.05), 0 8px 24px -12px rgba(20,23,31,.18);
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f1216; --card: #171b21; --ink: #eef1f5; --muted: #9aa3ae; --line: #2a3038; --accent: #4f8ff7; --accent-soft: #14253f; --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6); }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  a { color: var(--accent); }
+  button { font: inherit; color: inherit; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px 64px; }
+
+  header { display: flex; align-items: center; justify-content: space-between; padding: 18px 0; gap: 16px; }
+  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; font-weight: 700; font-size: 20px; letter-spacing: -.01em; }
+  .brand svg { width: 28px; height: 28px; }
+  .brand small { font-weight: 500; color: var(--muted); font-size: 14px; margin-left: 6px; }
+  nav a { color: var(--muted); text-decoration: none; margin-left: 18px; font-size: 15px; }
+  nav a:hover { color: var(--ink); }
+
+  .hero { text-align: center; padding: 28px 0 22px; }
+  .hero h1 { font-size: clamp(30px, 5vw, 44px); margin: 0 0 8px; letter-spacing: -.02em; line-height: 1.1; }
+  .hero p { color: var(--muted); font-size: 18px; margin: 0 auto; max-width: 640px; }
+  .pill { display: inline-flex; align-items: center; gap: 8px; background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 6px 14px; font-size: 14px; font-weight: 600; margin-top: 14px; }
+  .pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-top: 26px; }
+  .tool { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; text-align: left; cursor: pointer; box-shadow: var(--shadow); transition: transform .12s, border-color .12s; display: flex; flex-direction: column; gap: 6px; }
+  .tool:hover, .tool:focus-visible { transform: translateY(-2px); border-color: var(--accent); outline: none; }
+  .tool .ico { width: 42px; height: 42px; border-radius: 10px; display: grid; place-items: center; font-size: 22px; background: var(--accent-soft); margin-bottom: 6px; }
+  .tool b { font-size: 17px; }
+  .tool span { color: var(--muted); font-size: 14px; }
+
+  .view { display: none; }
+  .view.active { display: block; }
+  .back { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); text-decoration: none; margin: 8px 0 14px; font-size: 15px; background: none; border: 0; padding: 0; cursor: pointer; }
+  .back:hover { color: var(--ink); }
+  .tool-head { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+  .tool-head .ico { width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center; font-size: 26px; background: var(--accent-soft); }
+  .tool-head h2 { margin: 0; font-size: 26px; letter-spacing: -.01em; }
+  .tool-head p { margin: 2px 0 0; color: var(--muted); }
+
+  .drop { border: 2px dashed color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--card); border-radius: var(--radius); padding: 40px 20px; text-align: center; cursor: pointer; transition: background .12s, border-color .12s; }
+  .drop.over { background: var(--accent-soft); border-color: var(--accent); }
+  .drop .big { font-size: 20px; font-weight: 600; }
+  .drop .sub { color: var(--muted); margin-top: 4px; }
+  .drop .btn { margin-top: 14px; }
+
+  .files { list-style: none; padding: 0; margin: 14px 0 0; display: flex; flex-direction: column; gap: 8px; }
+  .file { display: flex; align-items: center; gap: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+  .file .fico { width: 36px; height: 44px; border-radius: 6px; background: var(--accent-soft); display: grid; place-items: center; font-size: 12px; font-weight: 700; color: var(--accent); flex: none; }
+  .file .meta { flex: 1; min-width: 0; }
+  .file .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .file .info { color: var(--muted); font-size: 14px; }
+  .file .info.err { color: var(--err); }
+  .file .actions { display: flex; gap: 4px; }
+  .iconbtn { border: 1px solid var(--line); background: transparent; border-radius: 8px; width: 34px; height: 34px; cursor: pointer; font-size: 15px; display: grid; place-items: center; }
+  .iconbtn:hover { border-color: var(--accent); color: var(--accent); }
+  .iconbtn:disabled { opacity: .35; cursor: default; }
+  .file input[type=password] { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: inherit; }
+
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; margin-top: 16px; box-shadow: var(--shadow); }
+  .panel h3 { margin: 0 0 12px; font-size: 16px; }
+  .row { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center; }
+  .field { display: flex; flex-direction: column; gap: 5px; min-width: 180px; flex: 1; }
+  .field > span, .check > span { font-size: 14px; color: var(--muted); }
+  .field input, .field select, .field textarea { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: inherit; font: inherit; }
+  .field input:focus, .field select:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+  .field .hint { font-size: 13px; color: var(--muted); }
+  .check { display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 6px 0; }
+  .check input { width: 18px; height: 18px; accent-color: var(--accent); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .seg button { border: 0; background: transparent; padding: 9px 14px; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.on { background: var(--accent); color: var(--accent-ink); }
+  .swatches { display: flex; gap: 8px; }
+  .swatch { width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
+  .swatch.on { border-color: var(--ink); }
+  .anchor { display: grid; grid-template-columns: repeat(3, 34px); gap: 4px; }
+  .anchor button { width: 34px; height: 26px; border: 1px solid var(--line); background: transparent; border-radius: 6px; cursor: pointer; }
+  .anchor button.on { background: var(--accent); border-color: var(--accent); }
+
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 12px 20px; font-weight: 600; cursor: pointer; text-decoration: none; color: inherit; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-size: 17px; padding: 15px 26px; }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn:disabled { opacity: .5; cursor: default; filter: none; }
+  .cta { display: flex; justify-content: center; margin: 22px 0 6px; }
+  .cta .btn { min-width: 260px; }
+
+  .result { text-align: center; }
+  .result .done { font-size: 44px; }
+  .result h3 { font-size: 22px; margin: 6px 0 4px; }
+  .result p { color: var(--muted); margin: 0 0 16px; }
+  .outs { display: flex; flex-direction: column; gap: 8px; max-width: 560px; margin: 0 auto; text-align: left; }
+  .out { display: flex; align-items: center; gap: 12px; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--bg); }
+  .out .meta { flex: 1; min-width: 0; }
+  .out .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .out .info { color: var(--muted); font-size: 14px; }
+  .out .info b { color: var(--ok); }
+  .result .again { margin-top: 18px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .notice { border-radius: 12px; padding: 12px 14px; margin-top: 14px; font-size: 15px; }
+  .notice.warn { background: color-mix(in srgb, var(--warn) 12%, var(--card)); color: var(--warn); }
+  .notice.err { background: color-mix(in srgb, var(--err) 12%, var(--card)); color: var(--err); }
+  .progress { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin-top: 14px; }
+  .progress i { display: block; height: 100%; width: 30%; background: var(--accent); animation: slide 1s infinite ease-in-out; }
+  @keyframes slide { 0% { margin-left: 0 } 50% { margin-left: 70% } 100% { margin-left: 0 } }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; margin-top: 14px; }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px; text-align: center; cursor: grab; user-select: none; position: relative; }
+  .tile.dragging { opacity: .4; }
+  .tile.over { border-color: var(--accent); }
+  .tile .pg { margin: 0 auto; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; display: grid; place-items: center; font-weight: 700; color: var(--muted); font-size: 22px; transition: transform .15s; }
+  .tile .num { font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .tile .tacts { display: flex; justify-content: center; gap: 4px; margin-top: 6px; }
+  .tile.deleted .pg { opacity: .25; text-decoration: line-through; }
+  .tile.deleted { border-style: dashed; }
+
+  footer { margin-top: 56px; border-top: 1px solid var(--line); padding-top: 18px; color: var(--muted); font-size: 14px; display: flex; flex-wrap: wrap; gap: 8px 22px; justify-content: space-between; }
+  .why { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-top: 40px; }
+  .why div { color: var(--muted); font-size: 15px; }
+  .why b { color: var(--ink); display: block; margin-bottom: 4px; }
+  .sr { position: absolute; left: -9999px; }
+  @media (max-width: 600px) { .hero p { font-size: 16px } nav a { margin-left: 12px } .cta .btn { width: 100% } }
 </style>
 </head>
 <body>
-<h1>foliopdf</h1>
-<p class="sub">PDF editing in your browser. Files never leave this page. <span id="ver"></span></p>
+<div class="wrap">
+  <header>
+    <a class="brand" href="#" id="home-link" aria-label="foliopdf home">
+      <svg viewBox="0 0 28 28" fill="none" aria-hidden="true"><rect x="3" y="2" width="18" height="24" rx="3" fill="var(--accent)"/><path d="M15 2v7h6" fill="var(--accent-soft)"/><rect x="7" y="13" width="10" height="2" rx="1" fill="#fff"/><rect x="7" y="17" width="8" height="2" rx="1" fill="#fff"/></svg>
+      foliopdf <small>free PDF tools</small>
+    </a>
+    <nav><a href="https://github.com/keithadler/foliopdf" target="_blank" rel="noopener">Open source</a><a href="#" data-tool="batch">Advanced</a></nav>
+  </header>
 
-<div id="drop">Drop PDFs here or click to choose<input id="pick" type="file" accept="application/pdf" multiple hidden></div>
-<ul id="files"></ul>
+  <!-- HOME -->
+  <section class="view active" id="view-home">
+    <div class="hero">
+      <h1>Every PDF tool you pay for.<br>Free, and nothing leaves your device.</h1>
+      <p>Merge, split, compress, protect, rotate, watermark. It all runs right here in your browser, so your files are never uploaded anywhere.</p>
+      <div class="pill" id="status">Loading…</div>
+    </div>
+    <div class="grid" id="tools"></div>
+    <div class="why">
+      <div><b>Private by design</b>Your files are processed on this device by WebAssembly. Turn off Wi-Fi and it still works.</div>
+      <div><b>No accounts, no limits</b>No sign-up, no file-size cap, no daily quota, no watermark unless you add one.</div>
+      <div><b>Open source, MIT</b>Read the code, host it yourself, or use the same engine from Rust, JavaScript or the command line.</div>
+    </div>
+  </section>
 
-<fieldset>
-  <legend>Preset</legend>
-  <label>Saved presets <select id="preset"></select></label>
-  <button id="loadPreset">Load into editor</button>
-  <button id="savePreset">Save editor as preset</button>
-  <button id="deletePreset">Delete</button>
-  <p style="opacity:.7;margin:.5rem 0 0">Presets are stored in <code>localStorage</code> as JSON via <code>PresetStore</code>; the same JSON runs unchanged with the <code>folio</code> CLI.</p>
-</fieldset>
+  <!-- TOOL -->
+  <section class="view" id="view-tool">
+    <button class="back" id="back">← All tools</button>
+    <div class="tool-head"><div class="ico" id="t-ico"></div><div><h2 id="t-title"></h2><p id="t-desc"></p></div></div>
+    <div id="stage"></div>
+  </section>
 
-<fieldset>
-  <legend>Editor</legend>
-  <label>Name <input id="name" type="text" value="my-export"></label>
-  <label>Mode <select id="mode"><option value="each">each file</option><option value="merge">merge all</option></select></label><br>
-  <label><input id="stamp" type="checkbox" checked> Watermark <input id="stampText" type="text" value="DRAFT" size="12"> opacity <input id="opacity" type="number" min="0" max="1" step=".05" value="0.3" style="width:4.5em"> rotation <input id="rotation" type="number" value="45" style="width:4em"></label><br>
-  <label><input id="numbers" type="checkbox" checked> Page numbers <input id="numFmt" type="text" value="{page} / {pages}" size="14"></label><br>
-  <label>Rotate pages <input id="rotPages" type="text" placeholder="e.g. odd" size="8"> by <select id="rotDeg"><option>0</option><option>90</option><option>180</option><option>270</option></select></label><br>
-  <label>Keep only pages <input id="select" type="text" placeholder="e.g. 1-3,last" size="12"></label>
-  <label>Split every <input id="every" type="number" min="0" value="0" style="width:4em"> pages (0 = no split)</label><br>
-  <label><input id="strip" type="checkbox"> Strip metadata</label>
-  <label>Title <input id="title" type="text" size="16"></label><br>
-  <label>Owner password <input id="owner" type="text" size="12"></label>
-  <label>User password <input id="user" type="text" size="12"></label>
-  <label><input id="noCopy" type="checkbox"> forbid copy</label>
-  <label><input id="noModify" type="checkbox"> forbid modify</label><br>
-  <label>Output name <input id="filename" type="text" value="{stem}-edited.pdf" size="20"></label>
-</fieldset>
-
-<button id="run" class="primary">Run</button>
-<button id="showJson">Show preset JSON</button>
-<div id="out"></div>
-<pre id="json" hidden></pre>
+  <footer>
+    <span>foliopdf <span id="ver"></span> · MIT licence · <a href="https://github.com/keithadler/foliopdf">GitHub</a></span>
+    <span>Bytes uploaded to any server: <b>0</b></span>
+  </footer>
+</div>
+<input type="file" id="picker" accept="application/pdf,.pdf" multiple class="sr">
+<input type="file" id="imgpicker" accept="image/png,image/jpeg" class="sr">
 
 <script type="module">
-  import init, { PdfDocument, runBatch, PresetStore, version } from "../../pkg/foliopdf.js";
+import init, { PdfDocument, runBatch, PresetStore, version } from "../../pkg/foliopdf.js";
+
+const $ = (s, r = document) => r.querySelector(s);
+const el = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v; else if (k === "html") e.innerHTML = v; else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else if (v !== false && v != null) e.setAttribute(k, v === true ? "" : v);
+  }
+  for (const k of kids.flat()) if (k != null) e.append(k.nodeType ? k : document.createTextNode(k));
+  return e;
+};
+const kb = (n) => n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : n >= 1024 ? (n / 1024).toFixed(0) + " KB" : n + " B";
+const stem = (n) => n.replace(/\.pdf$/i, "");
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// ---------------------------------------------------------------- tools
+const TOOLS = [
+  { id: "merge",     ico: "🧩", name: "Merge PDFs",       desc: "Combine several files into one, in the order you choose.", multi: true },
+  { id: "split",     ico: "✂️", name: "Split PDF",        desc: "Break a file into parts, or pull out just the pages you need." },
+  { id: "compress",  ico: "🗜️", name: "Compress PDF",     desc: "Make files smaller without touching the quality of scans or photos.", multi: true },
+  { id: "protect",   ico: "🔒", name: "Protect PDF",      desc: "Add a password and stop copying, printing or editing.", multi: true },
+  { id: "unlock",    ico: "🔓", name: "Unlock PDF",       desc: "Remove a password from a file you have the password for.", multi: true },
+  { id: "rotate",    ico: "🔄", name: "Rotate PDF",       desc: "Turn every page, or just the odd or even ones.", multi: true },
+  { id: "delete",    ico: "🗑️", name: "Delete pages",     desc: "Remove pages you don't want." },
+  { id: "organize",  ico: "🗂️", name: "Organize pages",   desc: "Drag pages into a new order, rotate or remove them one by one." },
+  { id: "watermark", ico: "💧", name: "Watermark",        desc: "Stamp text like DRAFT or CONFIDENTIAL, or a logo, on every page.", multi: true },
+  { id: "numbers",   ico: "🔢", name: "Page numbers",     desc: "Add page numbers wherever you like.", multi: true },
+  { id: "info",      ico: "📝", name: "Edit document info",desc: "Change the title, author and keywords, or wipe hidden metadata.", multi: true },
+  { id: "batch",     ico: "⚙️", name: "Batch & presets",  desc: "Save a set of steps and run it on many files at once.", multi: true },
+];
+
+let current = null;        // tool
+let files = [];            // {file, bytes, doc, pages, err, needsPw, pw}
+let stage;
+
+// ---------------------------------------------------------------- boot
+try {
   await init();
-  document.getElementById("ver").textContent = "v" + version();
+  $("#status").textContent = "Ready · works offline · " + version();
+  $("#ver").textContent = "v" + version();
+} catch (e) {
+  $("#status").textContent = "Could not load the engine: " + e.message;
+}
+const grid = $("#tools");
+for (const t of TOOLS) grid.append(el("button", { class: "tool", "data-tool": t.id, onclick: () => open(t.id) }, el("div", { class: "ico" }, t.ico), el("b", {}, t.name), el("span", {}, t.desc)));
+$("#home-link").onclick = (e) => { e.preventDefault(); home(); };
+$("#back").onclick = home;
+$('nav a[data-tool]').onclick = (e) => { e.preventDefault(); open("batch"); };
+window.addEventListener("hashchange", route);
+route();
 
-  const $ = (id) => document.getElementById(id);
-  const files = [];
-  const KEY = "foliopdf.presets";
-  let store = (() => { try { const j = localStorage.getItem(KEY); return j ? PresetStore.fromJson(j) : PresetStore.withBuiltins(); } catch { return PresetStore.withBuiltins(); } })();
+function route() { const id = location.hash.slice(1); if (TOOLS.some((t) => t.id === id)) open(id, true); else home(true); }
+function home(fromRoute) { current = null; files.forEach((f) => f.doc?.free?.()); files = []; $("#view-tool").classList.remove("active"); $("#view-home").classList.add("active"); if (!fromRoute) history.replaceState(null, "", "#"); document.title = "foliopdf — free PDF tools that stay on your device"; }
+function open(id, fromRoute) {
+  current = TOOLS.find((t) => t.id === id); files.forEach((f) => f.doc?.free?.()); files = [];
+  $("#view-home").classList.remove("active"); $("#view-tool").classList.add("active");
+  $("#t-ico").textContent = current.ico; $("#t-title").textContent = current.name; $("#t-desc").textContent = current.desc;
+  document.title = current.name + " — foliopdf";
+  if (!fromRoute) history.replaceState(null, "", "#" + id);
+  stage = $("#stage"); stage.innerHTML = "";
+  renderStage();
+  window.scrollTo(0, 0);
+}
 
-  function refreshPresets() {
-    const sel = $("preset"); sel.innerHTML = "";
-    for (const n of store.names()) { const o = document.createElement("option"); o.textContent = n; sel.appendChild(o); }
+// ---------------------------------------------------------------- files
+function dropzone() {
+  const multi = current.multi || current.id === "merge";
+  const dz = el("div", { class: "drop", role: "button", tabindex: 0 },
+    el("div", { class: "big" }, multi ? "Drop your PDFs here" : "Drop your PDF here"),
+    el("div", { class: "sub" }, multi ? "or choose files from your computer" : "or choose a file from your computer"),
+    el("button", { class: "btn" }, multi ? "Choose files" : "Choose file"));
+  const pick = () => { $("#picker").multiple = multi; $("#picker").value = ""; $("#picker").click(); };
+  dz.onclick = pick; dz.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } };
+  dz.ondragover = (e) => { e.preventDefault(); dz.classList.add("over"); };
+  dz.ondragleave = () => dz.classList.remove("over");
+  dz.ondrop = (e) => { e.preventDefault(); dz.classList.remove("over"); addFiles(e.dataTransfer.files); };
+  $("#picker").onchange = (e) => addFiles(e.target.files);
+  return dz;
+}
+async function addFiles(list) {
+  const multi = current.multi || current.id === "merge";
+  const incoming = [...list].filter((f) => /\.pdf$/i.test(f.name) || f.type === "application/pdf");
+  if (!incoming.length) return;
+  if (!multi) { files.forEach((f) => f.doc?.free?.()); files = []; }
+  for (const file of multi ? incoming : incoming.slice(0, 1)) {
+    const entry = { file, bytes: new Uint8Array(await file.arrayBuffer()), pw: "" };
+    files.push(entry);
+    loadEntry(entry);
   }
-  function persist() { try { localStorage.setItem(KEY, store.toJson()); } catch {} refreshPresets(); }
-  refreshPresets();
-
-  function addFiles(list) {
-    for (const f of list) if (f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf")) files.push(f);
-    renderFiles();
+  renderStage();
+}
+function loadEntry(entry) {
+  entry.doc?.free?.(); entry.doc = null; entry.err = null; entry.needsPw = false;
+  try {
+    entry.doc = entry.pw ? PdfDocument.loadWithPassword(entry.bytes, entry.pw) : PdfDocument.load(entry.bytes);
+    entry.pages = entry.doc.pageCount();
+    entry.enc = entry.doc.wasEncrypted() ? entry.doc.encryptionDescription() : null;
+    entry.repaired = entry.doc.wasReconstructed();
+  } catch (e) {
+    if (/password/i.test(e.message)) entry.needsPw = true; else entry.err = e.message;
   }
-  async function renderFiles() {
-    const ul = $("files"); ul.innerHTML = "";
-    for (const f of files) {
-      const li = document.createElement("li");
-      try {
-        const doc = PdfDocument.load(new Uint8Array(await f.arrayBuffer()));
-        const p = doc.pages()[0];
-        li.textContent = `${f.name}: ${doc.pageCount()} pages, ${Math.round(p.mediaBox.x1 - p.mediaBox.x0)}×${Math.round(p.mediaBox.y1 - p.mediaBox.y0)} pt` +
-          (doc.wasEncrypted() ? `, ${doc.encryptionDescription()}` : "") + (doc.wasReconstructed() ? " (repaired)" : "");
-        doc.free();
-      } catch (e) { li.innerHTML = `${f.name}: <span class="err">${e.message}</span>`; }
-      ul.appendChild(li);
+}
+function fileList(opts = {}) {
+  if (!files.length) return null;
+  const ul = el("ul", { class: "files" });
+  files.forEach((f, i) => {
+    const info = f.err ? el("div", { class: "info err" }, f.err)
+      : f.needsPw ? el("div", { class: "info" }, "This file has a password. ", el("input", { type: "password", placeholder: "Enter password", onkeydown: (e) => { if (e.key === "Enter") { f.pw = e.target.value; loadEntry(f); renderStage(); } }, onchange: (e) => { f.pw = e.target.value; loadEntry(f); renderStage(); } }))
+      : el("div", { class: "info" }, `${f.pages} page${f.pages === 1 ? "" : "s"} · ${kb(f.bytes.length)}` + (f.enc ? ` · protected (${f.enc})` : "") + (f.repaired ? " · repaired a damaged file" : ""));
+    const acts = el("div", { class: "actions" });
+    if (opts.reorder) {
+      acts.append(el("button", { class: "iconbtn", title: "Move up", disabled: i === 0, onclick: () => { [files[i - 1], files[i]] = [files[i], files[i - 1]]; renderStage(); } }, "↑"));
+      acts.append(el("button", { class: "iconbtn", title: "Move down", disabled: i === files.length - 1, onclick: () => { [files[i + 1], files[i]] = [files[i], files[i + 1]]; renderStage(); } }, "↓"));
     }
-  }
-  const drop = $("drop");
-  drop.addEventListener("click", () => $("pick").click());
-  $("pick").addEventListener("change", (e) => addFiles(e.target.files));
-  drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
-  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
-  drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); addFiles(e.dataTransfer.files); });
+    acts.append(el("button", { class: "iconbtn", title: "Remove", onclick: () => { f.doc?.free?.(); files.splice(i, 1); renderStage(); } }, "✕"));
+    ul.append(el("li", { class: "file" }, el("div", { class: "fico" }, "PDF"), el("div", { class: "meta" }, el("div", { class: "name", title: f.file.name }, f.file.name), info), acts));
+  });
+  return ul;
+}
+const ready = () => files.filter((f) => f.doc);
 
-  function editorToPreset() {
-    const steps = [];
-    if ($("select").value.trim()) steps.push({ op: "select-pages", pages: $("select").value.trim() });
-    if (+$("rotDeg").value) steps.push({ op: "rotate", pages: $("rotPages").value.trim() || undefined, degrees: +$("rotDeg").value });
-    if ($("stamp").checked) steps.push({ op: "stamp-text", text: $("stampText").value, opacity: +$("opacity").value, rotation: +$("rotation").value, size: 72 });
-    if ($("numbers").checked) steps.push({ op: "page-numbers", format: $("numFmt").value });
-    if ($("title").value) steps.push({ op: "metadata", title: $("title").value });
-    if ($("strip").checked) steps.push({ op: "strip-metadata" });
-    if (+$("every").value > 0) steps.push({ op: "split", every: +$("every").value });
-    const output = { filename: $("filename").value || "{stem}.pdf" };
-    if ($("owner").value || $("user").value)
-      output.encryption = { ownerPassword: $("owner").value, userPassword: $("user").value, permissions: { copy: !$("noCopy").checked, modify: !$("noModify").checked } };
-    return { name: $("name").value || "untitled", mode: $("mode").value, steps, output };
-  }
-  function presetToEditor(p) {
-    $("name").value = p.name; $("mode").value = p.mode || "each";
-    $("stamp").checked = false; $("numbers").checked = false; $("strip").checked = false;
-    $("select").value = ""; $("rotPages").value = ""; $("rotDeg").value = "0"; $("every").value = 0; $("title").value = "";
-    for (const s of p.steps || []) {
-      if (s.op === "stamp-text") { $("stamp").checked = true; $("stampText").value = s.text; $("opacity").value = s.opacity ?? 0.5; $("rotation").value = s.rotation ?? 0; }
-      if (s.op === "page-numbers") { $("numbers").checked = true; $("numFmt").value = s.format ?? "{page} / {pages}"; }
-      if (s.op === "rotate") { $("rotPages").value = s.pages ?? ""; $("rotDeg").value = String(((s.degrees % 360) + 360) % 360); }
-      if (s.op === "select-pages") $("select").value = s.pages;
-      if (s.op === "split") $("every").value = s.every ?? 0;
-      if (s.op === "strip-metadata") $("strip").checked = true;
-      if (s.op === "metadata" && s.title) $("title").value = s.title;
-    }
-    const e = p.output?.encryption;
-    $("owner").value = e?.ownerPassword ?? ""; $("user").value = e?.userPassword ?? "";
-    $("noCopy").checked = e ? e.permissions?.copy === false : false; $("noModify").checked = e ? e.permissions?.modify === false : false;
-    $("filename").value = p.output?.filename ?? "{stem}.pdf";
-  }
-  $("loadPreset").onclick = () => { const p = store.get($("preset").value); if (p) presetToEditor(p); };
-  $("savePreset").onclick = () => { try { store.add(editorToPreset()); persist(); } catch (e) { alert(e.message); } };
-  $("deletePreset").onclick = () => { store.remove($("preset").value); persist(); };
-  $("showJson").onclick = () => { const pre = $("json"); pre.hidden = !pre.hidden; pre.textContent = JSON.stringify(editorToPreset(), null, 2); };
+// ---------------------------------------------------------------- ui bits
+function field(label, input, hint) { return el("label", { class: "field" }, el("span", {}, label), input, hint ? el("span", { class: "hint" }, hint) : null); }
+function check(label, checked, onchange) { const i = el("input", { type: "checkbox" }); i.checked = checked; i.onchange = () => onchange(i.checked); return el("label", { class: "check" }, i, el("span", {}, label)); }
+function segmented(options, value, onchange) {
+  const s = el("div", { class: "seg", role: "group" });
+  const render = () => { s.innerHTML = ""; for (const [v, l] of options) s.append(el("button", { type: "button", class: v === value ? "on" : "", onclick: () => { value = v; onchange(v); render(); } }, l)); };
+  render(); return s;
+}
+function anchorPicker(value, onchange) {
+  const names = ["top-left", "top-center", "top-right", "center-left", "center", "center-right", "bottom-left", "bottom-center", "bottom-right"];
+  const a = el("div", { class: "anchor", role: "group", "aria-label": "Position" });
+  const render = () => { a.innerHTML = ""; for (const n of names) a.append(el("button", { type: "button", class: n === value ? "on" : "", title: n.replace("-", " "), onclick: () => { value = n; onchange(n); render(); } })); };
+  render(); return a;
+}
+function swatches(value, onchange) {
+  const colors = [["#7a7a7a", [0.48, 0.48, 0.48]], ["#c0392b", [0.75, 0.22, 0.17]], ["#0b63d6", [0.04, 0.39, 0.84]], ["#1a7f4b", [0.1, 0.5, 0.29]], ["#111111", [0.07, 0.07, 0.07]]];
+  const w = el("div", { class: "swatches", role: "group", "aria-label": "Colour" });
+  const render = () => { w.innerHTML = ""; for (const [hex, rgb] of colors) w.append(el("button", { type: "button", class: "swatch" + (hex === value ? " on" : ""), style: `background:${hex}`, title: hex, onclick: () => { value = hex; onchange(rgb, hex); render(); } })); };
+  render(); return w;
+}
+function cta(label, onclick, enabled = true) { const b = el("button", { class: "btn primary", disabled: !enabled, onclick }, label); return el("div", { class: "cta" }, b); }
+function notice(kind, text) { return el("div", { class: "notice " + kind }, text); }
 
-  $("run").onclick = async () => {
-    const out = $("out"); out.innerHTML = "";
-    if (!files.length) { out.innerHTML = '<p class="err">Add some PDFs first.</p>'; return; }
-    const inputs = [];
-    for (const f of files) inputs.push({ name: f.name, data: new Uint8Array(await f.arrayBuffer()) });
+// ---------------------------------------------------------------- run + results
+async function runJob(label, work) {
+  stage.innerHTML = "";
+  stage.append(el("div", { class: "panel result" }, el("div", { class: "done" }, "⏳"), el("h3", {}, label), el("p", {}, "Working on this device…"), el("div", { class: "progress" }, el("i"))));
+  await sleep(30);
+  try {
     const t0 = performance.now();
-    try {
-      const { outputs, warnings } = runBatch(editorToPreset(), inputs, []);
-      const ms = Math.round(performance.now() - t0);
-      out.innerHTML = `<p>${outputs.length} file(s) in ${ms} ms</p>`;
-      for (const w of warnings) out.innerHTML += `<p class="warn">${w}</p>`;
-      for (const o of outputs) {
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(new Blob([o.data], { type: "application/pdf" }));
-        a.download = o.name; a.textContent = `${o.name} (${o.pages} pages, ${(o.bytes / 1024).toFixed(1)} KB)`;
-        out.appendChild(a);
-      }
-    } catch (e) { out.innerHTML = `<p class="err">${e.message}</p>`; }
-  };
+    const outs = await work();               // [{name, data, pages, before?}]
+    showResults(outs, Math.round(performance.now() - t0));
+  } catch (e) {
+    stage.innerHTML = "";
+    stage.append(el("div", { class: "panel result" }, el("div", { class: "done" }, "😕"), el("h3", {}, "That didn't work"), el("p", {}, e.message || String(e)), el("div", { class: "again" }, el("button", { class: "btn", onclick: () => { renderStage(); } }, "Try again"))));
+  }
+}
+function showResults(outs, ms) {
+  stage.innerHTML = "";
+  const list = el("div", { class: "outs" });
+  const urls = [];
+  for (const o of outs) {
+    const url = URL.createObjectURL(new Blob([o.data], { type: "application/pdf" })); urls.push([url, o.name]);
+    const size = o.before != null ? el("div", { class: "info" }, `${o.pages} pages · ${kb(o.before)} → ${kb(o.data.length)} `, el("b", {}, o.before > o.data.length ? `−${Math.round(100 - 100 * o.data.length / o.before)}%` : "already compact"))
+      : el("div", { class: "info" }, `${o.pages} page${o.pages === 1 ? "" : "s"} · ${kb(o.data.length)}`);
+    list.append(el("div", { class: "out" }, el("div", { class: "fico", style: "width:36px;height:44px;border-radius:6px;background:var(--accent-soft);display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--accent)" }, "PDF"), el("div", { class: "meta" }, el("div", { class: "name" }, o.name), size), el("a", { class: "btn", href: url, download: o.name }, "Download")));
+  }
+  const again = el("div", { class: "again" });
+  if (outs.length > 1) again.append(el("button", { class: "btn primary", onclick: () => { urls.forEach(([u, n], i) => setTimeout(() => { const a = el("a", { href: u, download: n }); document.body.append(a); a.click(); a.remove(); }, i * 250)); } }, `Download all ${outs.length} files`));
+  again.append(el("button", { class: "btn", onclick: () => { files.forEach((f) => f.doc?.free?.()); files = []; renderStage(); } }, "Do another"), el("button", { class: "btn", onclick: home }, "All tools"));
+  stage.append(el("div", { class: "panel result" }, el("div", { class: "done" }, "✅"), el("h3", {}, outs.length === 1 ? "Your file is ready" : `${outs.length} files are ready`), el("p", {}, `Done in ${ms < 1000 ? ms + " ms" : (ms / 1000).toFixed(1) + " s"}, entirely on this device.`), list, again));
+}
+// Apply fn(doc, entry) to each ready file, save, collect outputs.
+async function perFile(suffix, fn, saveOpts = {}) {
+  const outs = [];
+  for (const f of ready()) {
+    const doc = f.pw ? PdfDocument.loadWithPassword(f.bytes, f.pw) : PdfDocument.load(f.bytes);
+    const r = await fn(doc, f);
+    if (r === false) { doc.free(); continue; }
+    const data = doc.save(saveOpts);
+    outs.push({ name: `${stem(f.file.name)}${suffix}.pdf`, data, pages: doc.pageCount(), before: current.id === "compress" ? f.bytes.length : undefined });
+    doc.free();
+    await sleep(0);
+  }
+  if (!outs.length) throw new Error("Nothing to do.");
+  return outs;
+}
+
+// ---------------------------------------------------------------- stages
+function renderStage() {
+  stage.innerHTML = "";
+  const fn = STAGES[current.id];
+  fn();
+}
+const STAGES = {
+  merge() {
+    stage.append(dropzone(), fileList({ reorder: true }) ?? el("p", { class: "hint", style: "color:var(--muted);text-align:center;margin-top:12px" }, "Add two or more PDFs. Use the arrows to set the order."));
+    const n = ready().length;
+    stage.append(cta(n >= 2 ? `Merge ${n} files` : "Merge PDFs", () => runJob("Merging", async () => {
+      const first = ready()[0];
+      const out = new PdfDocument();
+      for (const f of ready()) { out.importPages(f.doc, null, null); await sleep(0); }
+      out.setMetadata(first.doc.metadata());
+      const data = out.save({}); const pages = out.pageCount(); out.free();
+      return [{ name: (ready().length === 1 ? stem(first.file.name) : stem(first.file.name) + "-merged") + ".pdf", data, pages }];
+    }), n >= 2));
+  },
+  split() {
+    stage.append(dropzone(), fileList());
+    const f = ready()[0];
+    if (!f) return;
+    const o = (STAGES.split.o ??= { mode: "every", every: 1, ranges: "", extract: "" });
+    const p = el("div", { class: "panel" }, el("h3", {}, "How do you want to split it?"));
+    const modes = el("div", { class: "row" }, segmented([["every", "Into equal parts"], ["ranges", "Custom ranges"], ["extract", "Extract pages"]], o.mode, (v) => { o.mode = v; renderStage(); }));
+    p.append(modes);
+    const detail = el("div", { class: "row", style: "margin-top:14px" });
+    if (o.mode === "every") detail.append(field("Pages per file", el("input", { type: "number", min: 1, max: f.pages, value: o.every, oninput: (e) => (o.every = Math.max(1, +e.target.value || 1)) }), `${f.pages} pages → ${Math.ceil(f.pages / Math.max(1, o.every))} files`));
+    if (o.mode === "ranges") detail.append(field("One range per file, separated by commas", el("input", { type: "text", placeholder: "e.g. 1-3, 4-9, 10-", value: o.ranges, oninput: (e) => (o.ranges = e.target.value) }), "Use “last” for the final page. “10-” means page 10 to the end."));
+    if (o.mode === "extract") detail.append(field("Pages to keep in one new file", el("input", { type: "text", placeholder: "e.g. 1, 4-6, last", value: o.extract, oninput: (e) => (o.extract = e.target.value) }), "Pages appear in the order you list them."));
+    p.append(detail);
+    stage.append(p, cta("Split PDF", () => runJob("Splitting", async () => {
+      const outs = [];
+      const make = (spec, i, total) => { const d = PdfDocument.load(f.bytes); d.selectPages(spec); const data = d.save({}); outs.push({ name: `${stem(f.file.name)}-${total > 1 ? i + 1 : "pages"}.pdf`, data, pages: d.pageCount() }); d.free(); };
+      if (o.mode === "every") { const total = Math.ceil(f.pages / o.every); for (let i = 0; i < total; i++) { const a = i * o.every + 1, b = Math.min(f.pages, a + o.every - 1); make(a === b ? `${a}` : `${a}-${b}`, i, total); await sleep(0); } }
+      else if (o.mode === "ranges") { const rs = o.ranges.split(",").map((s) => s.trim()).filter(Boolean); if (!rs.length) throw new Error("Type at least one page range, like 1-3."); rs.forEach((r, i) => make(r, i, rs.length)); }
+      else { if (!o.extract.trim()) throw new Error("Type the pages to keep, like 1, 4-6."); make(o.extract, 0, 1); }
+      return outs;
+    })));
+  },
+  compress() {
+    stage.append(dropzone(), fileList());
+    if (!ready().length) return;
+    const o = (STAGES.compress.o ??= { level: 6, strip: false });
+    stage.append(el("div", { class: "panel" }, el("h3", {}, "Options"), el("div", { class: "row" },
+      segmented([[6, "Balanced (fast)"], [10, "Smallest (slower)"]], o.level, (v) => (o.level = v)),
+      check("Also remove hidden metadata (author, editing history, thumbnails)", o.strip, (v) => (o.strip = v)))),
+      el("p", { style: "color:var(--muted);font-size:14px;margin:10px 4px 0" }, "Text and vector content is repacked losslessly; scanned pages and photos are kept exactly as they are, so quality never drops."),
+      cta(`Compress ${ready().length > 1 ? ready().length + " files" : "PDF"}`, () => runJob("Compressing", () => perFile("-compressed", () => {}, { compress: true, compressionLevel: o.level, stripMetadata: o.strip }))));
+  },
+  protect() {
+    stage.append(dropzone(), fileList());
+    if (!ready().length) return;
+    const o = (STAGES.protect.o ??= { user: "", owner: "", copy: true, print: true, modify: true });
+    const u = el("input", { type: "password", autocomplete: "new-password", value: o.user, oninput: (e) => (o.user = e.target.value) });
+    const w = el("input", { type: "password", autocomplete: "new-password", value: o.owner, oninput: (e) => (o.owner = e.target.value) });
+    stage.append(el("div", { class: "panel" }, el("h3", {}, "Password"), el("div", { class: "row" }, field("Password to open the file", u, "Leave empty if anyone may open it but you still want to restrict what they can do."), field("Owner password (optional)", w, "Lets you lift the restrictions later. Defaults to the open password.")),
+      el("h3", { style: "margin-top:18px" }, "What readers may do"), el("div", { class: "row" }, check("Copy text and images", o.copy, (v) => (o.copy = v)), check("Print", o.print, (v) => (o.print = v)), check("Edit or add pages", o.modify, (v) => (o.modify = v))),
+      el("p", { style: "color:var(--muted);font-size:14px;margin:12px 0 0" }, "Uses AES-256 encryption, the current standard that every modern reader supports.")),
+      cta("Protect PDF", () => runJob("Encrypting", () => { if (!o.user && !o.owner) throw new Error("Enter at least one password."); return perFile("-protected", () => {}, { encryption: { userPassword: o.user, ownerPassword: o.owner, permissions: { copy: o.copy, accessibility: o.copy, print: o.print, printHighQuality: o.print, modify: o.modify, annotate: o.modify, assemble: o.modify, fillForms: o.modify } } }); })));
+  },
+  unlock() {
+    stage.append(dropzone(), fileList());
+    const locked = files.filter((f) => f.needsPw);
+    if (locked.length) stage.append(notice("warn", "Type the password next to each locked file (press Enter), then unlock."));
+    if (!ready().length) return;
+    const n = ready().filter((f) => f.enc).length;
+    if (!n) stage.append(notice("warn", "These files aren't password protected, so there's nothing to unlock."));
+    stage.append(cta("Remove protection", () => runJob("Unlocking", () => perFile("-unlocked", (doc, f) => f.enc ? undefined : false, {})), n > 0));
+  },
+  rotate() {
+    stage.append(dropzone(), fileList());
+    if (!ready().length) return;
+    const o = (STAGES.rotate.o ??= { deg: 90, which: "all", custom: "" });
+    const pgs = el("div", { class: "row", style: "margin-top:14px" }, segmented([["all", "All pages"], ["odd", "Odd pages"], ["even", "Even pages"], ["custom", "Specific pages"]], o.which, (v) => { o.which = v; renderStage(); }));
+    if (o.which === "custom") pgs.append(field("Pages", el("input", { type: "text", placeholder: "e.g. 1, 3-5, last", value: o.custom, oninput: (e) => (o.custom = e.target.value) })));
+    stage.append(el("div", { class: "panel" }, el("h3", {}, "Rotate"), el("div", { class: "row" }, segmented([[90, "↻ 90° right"], [180, "180°"], [270, "↺ 90° left"]], o.deg, (v) => (o.deg = v))), pgs),
+      cta("Rotate PDF", () => runJob("Rotating", () => perFile("-rotated", (doc) => { doc.rotatePages(o.which === "all" ? null : o.which === "custom" ? o.custom : o.which, o.deg); }))));
+  },
+  delete() {
+    stage.append(dropzone(), fileList());
+    const f = ready()[0]; if (!f) return;
+    const o = (STAGES.delete.o ??= { pages: "" });
+    stage.append(el("div", { class: "panel" }, el("h3", {}, "Which pages should go?"), el("div", { class: "row" }, field(`Pages to delete (this file has ${f.pages})`, el("input", { type: "text", placeholder: "e.g. 2, 5-7, last", value: o.pages, oninput: (e) => (o.pages = e.target.value) }), "Tip: “even” or “odd” work too."))),
+      cta("Delete pages", () => runJob("Removing pages", () => { if (!o.pages.trim()) throw new Error("Type the pages to delete, like 2, 5-7."); return perFile("-edited", (doc) => { doc.deletePages(o.pages); if (doc.pageCount() === 0) throw new Error("That would delete every page."); }); })));
+  },
+  organize() {
+    stage.append(dropzone(), fileList());
+    const f = ready()[0]; if (!f) return;
+    if (!STAGES.organize.o || STAGES.organize.o.for !== f) STAGES.organize.o = { for: f, tiles: f.doc.pages().map((p, i) => ({ src: i, rot: 0, del: false, w: p.mediaBox.x1 - p.mediaBox.x0, h: p.mediaBox.y1 - p.mediaBox.y0, swap: p.rotation === "90" || p.rotation === "270" })) };
+    const o = STAGES.organize.o;
+    const grid = el("div", { class: "tiles" });
+    let dragFrom = null;
+    o.tiles.forEach((t, i) => {
+      const [w, h] = t.swap ? [t.h, t.w] : [t.w, t.h];
+      const scale = 72 / Math.max(w, h);
+      const pg = el("div", { class: "pg", style: `width:${Math.round(w * scale)}px;height:${Math.round(h * scale)}px;transform:rotate(${t.rot}deg)` }, String(t.src + 1));
+      const tile = el("div", { class: "tile" + (t.del ? " deleted" : ""), draggable: true }, pg, el("div", { class: "num" }, `Page ${t.src + 1}${t.rot ? ` · ${t.rot}°` : ""}`),
+        el("div", { class: "tacts" }, el("button", { class: "iconbtn", title: "Rotate", onclick: () => { t.rot = (t.rot + 90) % 360; renderStage(); } }, "↻"), el("button", { class: "iconbtn", title: t.del ? "Restore" : "Remove", onclick: () => { t.del = !t.del; renderStage(); } }, t.del ? "↩" : "✕")));
+      tile.ondragstart = (e) => { dragFrom = i; tile.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; };
+      tile.ondragend = () => tile.classList.remove("dragging");
+      tile.ondragover = (e) => { e.preventDefault(); tile.classList.add("over"); };
+      tile.ondragleave = () => tile.classList.remove("over");
+      tile.ondrop = (e) => { e.preventDefault(); if (dragFrom == null || dragFrom === i) return; const [m] = o.tiles.splice(dragFrom, 1); o.tiles.splice(i, 0, m); renderStage(); };
+      grid.append(tile);
+    });
+    const keep = o.tiles.filter((t) => !t.del);
+    stage.append(el("div", { class: "panel" }, el("h3", {}, "Drag pages to reorder. Use the buttons to rotate or remove."), grid, el("div", { class: "row", style: "margin-top:12px" }, el("button", { class: "btn", onclick: () => { o.tiles.reverse(); renderStage(); } }, "Reverse order"), el("button", { class: "btn", onclick: () => { STAGES.organize.o = null; renderStage(); } }, "Reset"))),
+      cta(`Save ${keep.length} page${keep.length === 1 ? "" : "s"}`, () => runJob("Rebuilding", () => perFile("-organized", (doc) => {
+        doc.selectPages(keep.map((t) => t.src + 1).join(","));
+        keep.forEach((t, k) => { if (t.rot) doc.rotatePages(String(k + 1), t.rot); });
+      })), keep.length > 0));
+  },
+  watermark() {
+    stage.append(dropzone(), fileList());
+    if (!ready().length) return;
+    const o = (STAGES.watermark.o ??= { kind: "text", text: "DRAFT", size: 72, opacity: 0.3, rotation: 45, color: [0.48, 0.48, 0.48], hex: "#7a7a7a", pos: "center", img: null, imgName: "", width: 120, under: false });
+    const p = el("div", { class: "panel" }, el("h3", {}, "Watermark"), el("div", { class: "row" }, segmented([["text", "Text"], ["image", "Logo or image"]], o.kind, (v) => { o.kind = v; renderStage(); })));
+    if (o.kind === "text") {
+      p.append(el("div", { class: "row", style: "margin-top:14px" }, field("Text", el("input", { type: "text", value: o.text, oninput: (e) => (o.text = e.target.value) }), "{page} and {pages} become the page number and total"), field("Size", el("input", { type: "range", min: 12, max: 160, value: o.size, oninput: (e) => (o.size = +e.target.value) })), field("Opacity", el("input", { type: "range", min: 0.05, max: 1, step: 0.05, value: o.opacity, oninput: (e) => (o.opacity = +e.target.value) }))),
+        el("div", { class: "row", style: "margin-top:14px" }, field("Angle", segmented([[0, "Straight"], [45, "Diagonal"], [90, "Vertical"]], o.rotation, (v) => (o.rotation = v))), field("Colour", swatches(o.hex, (rgb, hex) => { o.color = rgb; o.hex = hex; })), field("Position", anchorPicker(o.pos, (v) => (o.pos = v)))));
+    } else {
+      const pick = el("button", { class: "btn", onclick: () => { $("#imgpicker").value = ""; $("#imgpicker").onchange = async (e) => { const f = e.target.files[0]; if (!f) return; o.img = new Uint8Array(await f.arrayBuffer()); o.imgName = f.name; renderStage(); }; $("#imgpicker").click(); } }, o.img ? `Change image (${o.imgName})` : "Choose PNG or JPEG");
+      p.append(el("div", { class: "row", style: "margin-top:14px" }, field("Image", pick, "PNG transparency is kept."), field("Width on page (points; 72 = 1 inch)", el("input", { type: "number", min: 10, max: 2000, value: o.width, oninput: (e) => (o.width = +e.target.value) })), field("Opacity", el("input", { type: "range", min: 0.05, max: 1, step: 0.05, value: o.opacity, oninput: (e) => (o.opacity = +e.target.value) })), field("Position", anchorPicker(o.pos, (v) => (o.pos = v)))));
+    }
+    p.append(el("div", { class: "row", style: "margin-top:8px" }, check("Place behind the page content instead of on top", o.under, (v) => (o.under = v))));
+    stage.append(p, cta("Add watermark", () => runJob("Stamping", () => perFile("-watermarked", (doc) => {
+      if (o.kind === "text") { if (!o.text.trim()) throw new Error("Type the watermark text."); doc.stampText(null, { text: o.text, size: o.size, opacity: o.opacity, rotation: o.rotation, color: o.color, position: o.pos, under: o.under }); }
+      else { if (!o.img) throw new Error("Choose an image first."); doc.stampImage(null, o.img, { width: o.width, opacity: o.opacity, position: o.pos, under: o.under }); }
+    }))));
+  },
+  numbers() {
+    stage.append(dropzone(), fileList());
+    if (!ready().length) return;
+    const o = (STAGES.numbers.o ??= { format: "{page} / {pages}", pos: "bottom-center", size: 10, start: 1 });
+    stage.append(el("div", { class: "panel" }, el("h3", {}, "Page numbers"), el("div", { class: "row" }, field("Style", segmented([["{page}", "1"], ["{page} / {pages}", "1 / 12"], ["Page {page} of {pages}", "Page 1 of 12"], ["- {page} -", "- 1 -"]], o.format, (v) => (o.format = v))), field("Position", anchorPicker(o.pos, (v) => (o.pos = v))), field("Size", el("input", { type: "number", min: 6, max: 36, value: o.size, oninput: (e) => (o.size = +e.target.value) })), field("Start counting at", el("input", { type: "number", min: 0, value: o.start, oninput: (e) => (o.start = +e.target.value) })))),
+      cta("Add page numbers", () => runJob("Numbering", () => perFile("-numbered", (doc) => { doc.addPageNumbers(null, { format: o.format, position: o.pos, size: o.size, startAt: o.start }); }))));
+  },
+  info() {
+    stage.append(dropzone(), fileList());
+    const f = ready()[0]; if (!f) return;
+    const m = f.doc.metadata();
+    const o = (STAGES.info.o ??= {}); if (o.for !== f) Object.assign(o, { for: f, title: m.title ?? "", author: m.author ?? "", subject: m.subject ?? "", keywords: m.keywords ?? "", strip: false });
+    const inp = (k) => el("input", { type: "text", value: o[k], oninput: (e) => (o[k] = e.target.value) });
+    stage.append(el("div", { class: "panel" }, el("h3", {}, "Document information"), el("div", { class: "row" }, field("Title", inp("title")), field("Author", inp("author"))), el("div", { class: "row", style: "margin-top:12px" }, field("Subject", inp("subject")), field("Keywords", inp("keywords"))),
+      el("div", { class: "row", style: "margin-top:12px" }, check("Wipe all hidden metadata first (creator app, dates, XMP, thumbnails)", o.strip, (v) => (o.strip = v))),
+      m.creator || m.producer ? el("p", { style: "color:var(--muted);font-size:14px;margin:10px 0 0" }, `Currently: created with ${m.creator || "unknown"}, produced by ${m.producer || "unknown"}.`) : null),
+      cta("Save changes", () => runJob("Updating", () => perFile("-edited", (doc) => { if (o.strip) doc.stripMetadata(); doc.setMetadata({ title: o.title, author: o.author, subject: o.subject, keywords: o.keywords }); }, { stripMetadata: false }))));
+  },
+  batch() {
+    stage.append(dropzone(), fileList());
+    const KEY = "foliopdf.presets";
+    let store; try { const j = localStorage.getItem(KEY); store = j ? PresetStore.fromJson(j) : PresetStore.withBuiltins(); } catch { store = PresetStore.withBuiltins(); }
+    const o = (STAGES.batch.o ??= { name: store.names()[0], json: "" });
+    const persist = () => { try { localStorage.setItem(KEY, store.toJson()); } catch {} };
+    const sel = el("select", { onchange: (e) => { o.name = e.target.value; o.json = ""; renderStage(); } });
+    for (const n of store.names()) sel.append(el("option", { selected: n === o.name }, n));
+    const preset = store.get(o.name);
+    const ta = el("textarea", { rows: 12, style: "font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; width:100%", oninput: (e) => (o.json = e.target.value) }, o.json || JSON.stringify(preset ?? {}, null, 2));
+    const getPreset = () => { try { return JSON.parse(ta.value); } catch (e) { throw new Error("The preset isn't valid JSON: " + e.message); } };
+    stage.append(el("div", { class: "panel" }, el("h3", {}, "Presets are recipes: a list of steps plus output settings, saved as JSON in this browser"),
+      el("div", { class: "row" }, field("Saved presets", sel), el("button", { class: "btn", onclick: () => { const p = getPreset(); store.add(p); persist(); o.name = p.name; o.json = ""; renderStage(); } }, "Save"), el("button", { class: "btn", onclick: () => { store.remove(o.name); persist(); o.name = store.names()[0]; o.json = ""; renderStage(); } }, "Delete"), el("a", { class: "btn", href: "https://github.com/keithadler/foliopdf/blob/main/docs/presets.md", target: "_blank", rel: "noopener" }, "Step reference")),
+      el("div", { style: "margin-top:12px" }, ta),
+      el("p", { style: "color:var(--muted);font-size:14px;margin:8px 0 0" }, "The same JSON runs unchanged with the folio command-line tool, so what you design here can run on a server or in a script.")),
+      cta(`Run on ${ready().length} file${ready().length === 1 ? "" : "s"}`, () => runJob("Running preset", async () => {
+        const p = getPreset();
+        const r = runBatch(p, ready().map((f) => ({ name: f.file.name, data: f.bytes, password: f.pw || undefined })), []);
+        if (r.warnings.length) console.warn(r.warnings);
+        return r.outputs.map((x) => ({ name: x.name, data: x.data, pages: x.pages }));
+      }), ready().length > 0));
+  },
+};
 </script>
 </body>
 </html>
