@@ -47,77 +47,26 @@ let out = doc.save(&SaveOptions {
 })?;
 ```
 
-### Install it as an app
+### Install
 
-The web app is a Progressive Web App: open
-[keithadler.github.io/foliopdf](https://keithadler.github.io/foliopdf/),
-then use your browser's **Install app** button (Chrome, Edge, Brave: the
-icon in the address bar or the button in the app's header; Safari on iOS:
-Share → Add to Home Screen; Safari on macOS: File → Add to Dock). It then
-opens like any other app, works with no network at all, and can be set as
-the handler for `.pdf` files. Every deploy is versioned: an installed copy
-keeps working on the version it has, checks for a new build when opened,
-and offers a one-click update when one is available.
+**Web app**: nothing to install, open
+[keithadler.github.io/foliopdf](https://keithadler.github.io/foliopdf/)
+(or install it as an app from there, see above).
 
-## Why another PDF library
-
-Most open-source PDF editing runs either in a browser (JavaScript, slow on
-big files) or on a server (C libraries with awkward bindings). foliopdf is
-one engine that runs everywhere at native speed, with the same behaviour in
-the browser as on the command line, and no files ever leaving the machine.
-
-It reads what real-world producers write (Word, Chrome, WeasyPrint,
-DocuSign, Acrobat, iText, Google Docs, scanners) and writes what the
-standard says. Every save is a full rewrite: unreferenced objects are
-dropped, identical resources are deduplicated, streams are recompressed,
-and the result has one clean cross-reference section.
-
-## Features
-
-| Area | What you get |
-|---|---|
-| Reading | PDF 1.0–2.0, xref tables and streams, object streams, incremental updates, hybrid files; reconstruction by scanning when the xref is missing or lies |
-| Filters | Flate, LZW, ASCIIHex, ASCII85, RunLength, PNG/TIFF predictors; image codecs passed through intact |
-| Encryption in | RC4 40–128 bit, AES-128, AES-256 (revisions 2–6), user or owner password |
-| Encryption out | AES-256 (default), AES-128, RC4-128; full permission flags; optional unencrypted metadata |
-| Pages | insert, delete, reorder, duplicate, rotate, reverse, blank pages; resize to A4/Letter/any size or scale, with content and annotations scaled to match; import pages between documents with all their dependencies |
-| Merge and split | merge any number of files; split by page count or by ranges; page-range language `1-3,7,odd,last,r2`; bookmarks and form fields follow their pages |
-| Bookmarks and crop | read and write the outline tree (named destinations resolved); crop pages to an area |
-| Print layouts | 2-up and 4-up sheets, booklet imposition |
-| Images and OCR | images out as JPEG/PNG; invisible text layers from OCR words (the web app runs Tesseract in the browser) |
-| Forms | list fields (text, check box, radio, drop-down, list, signature), fill them with generated appearances, create and remove fields, flatten; fields survive merging and extraction |
-| Annotations | highlight, underline, strike-out, box, circle, line, ink, text box, sticky note, link, image stamp (signatures), each with an appearance stream; list, remove, flatten selectively |
-| Text | extract text with positions (simple and composite fonts, encodings, ToUnicode, form XObjects), words and lines in reading order, search with case and whole-word options |
-| Redaction | true removal of text, vector graphics and image pixels (raw, Flate and JPEG) under an area or a search term, including inside form XObjects; overlapping annotations removed; boxes painted over |
-| Stamps | text watermarks and image logos (JPEG/PNG with alpha) with opacity, rotation and nine anchor positions; page numbers; stamps stay upright on rotated pages |
-| Fonts | standard 14 with real metrics; embedded TrueType/OpenType with glyph subsetting and ToUnicode |
-| Compression | stream recompression, object streams, cross-reference streams, dedup of identical fonts and images, metadata stripping; optional lossy image downsampling and JPEG re-encoding for scans and photos |
-| Batch | JSON presets: merge-or-each modes, ordered steps, output naming templates, encryption; `PresetStore` for saving export configurations |
-
-Not in scope (yet): rendering pages to pixels in Rust, cryptographic
-digital signatures, OCR in Rust (the web app does it with Tesseract.js).
-See [docs/limitations.md](docs/limitations.md).
-
-## Install
-
-**CLI**: download a binary from the
-[releases page](https://github.com/keithadler/foliopdf/releases), or
+**CLI**: download `folio` for your platform from the
+[releases page](https://github.com/keithadler/foliopdf/releases) (Linux
+x86-64 and arm64, macOS Apple silicon and Intel, Windows), or build it:
 
 ```bash
-cargo install foliopdf-cli
+cargo install --git https://github.com/keithadler/foliopdf foliopdf-cli
 ```
 
-**Rust**:
-
-```toml
-[dependencies]
-foliopdf = "1"
-```
-
-**JavaScript / TypeScript**:
+**JavaScript / TypeScript**: the package is not on the npm registry yet;
+install it from the release tarball, which is exactly what `npm publish`
+would upload:
 
 ```bash
-npm install foliopdf
+npm install https://github.com/keithadler/foliopdf/releases/download/v1.0.0/foliopdf-1.0.0.tgz
 ```
 
 The package is an ES module with the `.wasm` file alongside. Bundlers (Vite,
@@ -128,6 +77,16 @@ import { readFile } from "node:fs/promises";
 import init, { PdfDocument } from "foliopdf";
 await init({ module_or_path: await readFile("node_modules/foliopdf/foliopdf_bg.wasm") });
 ```
+
+**Rust**: the crate is not on crates.io yet; use the git dependency:
+
+```toml
+[dependencies]
+foliopdf = { git = "https://github.com/keithadler/foliopdf", tag = "v1.0.0" }
+```
+
+Registry releases (`npm install foliopdf`, `cargo add foliopdf`) will
+follow once publishing is set up; the version numbers will match.
 
 ## Performance
 

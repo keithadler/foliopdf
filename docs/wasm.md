@@ -1,6 +1,7 @@
 # JavaScript and WebAssembly
 
-The npm package `foliopdf` is the core crate compiled to WebAssembly with
+The npm package `foliopdf` (until it is on the registry, install it from
+the release tarball linked in the README) is the core crate compiled to WebAssembly with
 [wasm-bindgen](https://rustwasm.github.io/wasm-bindgen/). It is an ES
 module; TypeScript definitions are included. The `.wasm` file is about
 1.5 MB (roughly 550 KB over the wire with Brotli); it includes the text

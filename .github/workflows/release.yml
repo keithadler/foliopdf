@@ -55,10 +55,16 @@ jobs:
       - run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
       - run: ./scripts/build-wasm.sh
       - run: node examples/node/smoke.mjs
-      - run: cd pkg && npm publish --access public --provenance
+      - name: Attach the npm tarball to the release
+        run: cd pkg && npm pack && cd .. && gh release upload ${{ github.ref_name }} pkg/foliopdf-*.tgz --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Publish to npm (needs the NPM_TOKEN secret)
+        if: env.NPM_TOKEN != ''
+        run: cd pkg && npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        continue-on-error: true
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   crates:
     name: crates.io
@@ -66,7 +72,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo publish -p foliopdf --token ${{ secrets.CARGO_TOKEN }}
-        continue-on-error: true
-      - run: sleep 60 && cargo publish -p foliopdf-cli --token ${{ secrets.CARGO_TOKEN }}
-        continue-on-error: true
+      - name: Publish to crates.io (needs the CARGO_TOKEN secret)
+        if: env.CARGO_TOKEN != ''
+        run: cargo publish -p foliopdf --token "$CARGO_TOKEN" && sleep 60 && cargo publish -p foliopdf-cli --token "$CARGO_TOKEN"
+        env:
+          CARGO_TOKEN: ${{ secrets.CARGO_TOKEN }}
