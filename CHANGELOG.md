@@ -29,6 +29,11 @@ All notable changes to this project are recorded here. The format follows
 - Web app: Redact (mark areas, find and mark every occurrence, report of
   what was removed) and Extract text tools; Compress gains image quality
   presets.
+- Bookmarks (`outline` module): read the tree (named destinations resolved),
+  replace it, and carry it across merge, extract and page selection. CLI
+  `bookmarks`; wasm `bookmarks`/`setBookmarks`; web Bookmarks tool.
+- Crop: `ops::crop_pages`/`uncrop_pages`, CLI `crop`, wasm `cropPages`/
+  `uncropPages`, web Crop tool (drag the area to keep).
 - Web app is installable (web manifest, icons, service worker): works
   fully offline once opened, registers as a `.pdf` file handler, shows the
   build in the footer and offers a one-click update when a new deploy is

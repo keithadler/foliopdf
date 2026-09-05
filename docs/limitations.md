@@ -18,9 +18,8 @@ when you need one of these.
   the whole image (the codecs are not decoded); everything else is blanked
   pixel by pixel. Vector paths that only cross a redaction area are kept.
 - **OCR.** Scanned pages have no text to extract, search or redact by text.
-- **Outlines (bookmarks)**, named destinations and article threads are not
-  carried across `import_pages`/merge. They are preserved when you edit a
-  single document in place.
+- **Named destinations and article threads** are not copied across
+  `import_pages`/merge (bookmarks are, with their targets resolved).
 - **Cryptographic digital signatures.** Existing signatures are invalidated
   by any save (that is inherent to signing); creating certificate-based
   signatures is out of scope. Drawn, typed or scanned signatures placed as

@@ -771,6 +771,24 @@ impl Document {
     /// a repeated page becomes a copy that shares content and resources
     /// with the original.
     pub fn select_pages(&mut self, order: &[usize]) -> Result<()> {
+        let had_outline = self.catalog().contains("Outlines");
+        let old_count = self.page_count();
+        self.select_pages_inner(order)?;
+        if had_outline {
+            // First occurrence of each kept page keeps its bookmarks.
+            let mut map: HashMap<usize, usize> = HashMap::new();
+            for (new, &old) in order.iter().enumerate() {
+                if old < old_count {
+                    map.entry(old).or_insert(new);
+                }
+            }
+            let items = crate::outline::imported_bookmarks(self, &map);
+            crate::outline::set_bookmarks(self, &items)?;
+        }
+        Ok(())
+    }
+
+    fn select_pages_inner(&mut self, order: &[usize]) -> Result<()> {
         let root = self.flatten_page_tree();
         let all = self.page_refs();
         let mut kids = Vec::with_capacity(order.len());
@@ -905,6 +923,21 @@ impl Document {
             kids.insert(at + k, p);
         }
         self.set_kids(root, kids);
+        // Bookmarks of the imported pages join this document's outline.
+        if src.catalog().contains("Outlines") {
+            let mut page_map: HashMap<usize, usize> = HashMap::new();
+            for (k, &i) in indices.iter().enumerate() {
+                page_map.entry(i).or_insert(at + k);
+            }
+            let imported = crate::outline::imported_bookmarks(src, &page_map);
+            if !imported.is_empty() {
+                let mut all = crate::outline::bookmarks(self);
+                // Existing bookmarks past the insertion point shift down.
+                shift_bookmarks(&mut all, at, indices.len());
+                all.extend(imported);
+                crate::outline::set_bookmarks(self, &all)?;
+            }
+        }
         Ok(new_pages)
     }
 
@@ -1381,5 +1414,17 @@ impl Name {
     /// Helper used by the writer to test membership in a list of names.
     pub(crate) fn is_any(&self, names: &[&str]) -> bool {
         names.iter().any(|n| self == n)
+    }
+}
+
+/// Moves bookmark targets at or after `at` down by `by` pages.
+fn shift_bookmarks(items: &mut [crate::outline::Bookmark], at: usize, by: usize) {
+    for b in items {
+        if let Some(p) = b.page {
+            if p >= at {
+                b.page = Some(p + by);
+            }
+        }
+        shift_bookmarks(&mut b.children, at, by);
     }
 }

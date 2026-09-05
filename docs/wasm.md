@@ -3,7 +3,8 @@
 The npm package `foliopdf` is the core crate compiled to WebAssembly with
 [wasm-bindgen](https://rustwasm.github.io/wasm-bindgen/). It is an ES
 module; TypeScript definitions are included. The `.wasm` file is about
-780 KB (roughly 300 KB over the wire with Brotli).
+1.5 MB (roughly 550 KB over the wire with Brotli); it includes the text
+engine, JPEG codecs and everything else, and loads in well under a second.
 
 ## Loading
 
@@ -100,6 +101,15 @@ doc.removeField("email");
 
 The web app's Fill & Sign, Fill a form and Comment tools are built on
 exactly these calls (see `examples/web/editor.js`).
+
+## Crop and bookmarks
+
+```ts
+doc.cropPages("1-3", { x0: 36, y0: 36, x1: 576, y1: 756 });   // screen coordinates
+doc.uncropPages(null);
+const tree = doc.bookmarks();                                   // [{ title, page, top, uri, open, style, children }]
+doc.setBookmarks([{ title: "Intro", page: 0, children: [{ title: "Scope", page: 0, top: 500 }] }]);
+```
 
 ## Images to PDF
 

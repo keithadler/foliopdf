@@ -91,6 +91,8 @@ const TOOLS = [
   { id: "delete",    ico: "🗑️", name: "Delete pages",      desc: "Remove pages you don't want." },
   { id: "organize",  ico: "🗂️", name: "Organize pages",    desc: "Drag pages into a new order, rotate, remove or add blank pages." },
   { id: "resize",    ico: "📐", name: "Page size",         desc: "Change pages to A4, Letter or any size, or scale them up or down.", multi: true },
+  { id: "crop",      ico: "⌗", name: "Crop",               desc: "Trim the margins, or keep just one part of the page." },
+  { id: "bookmarks", ico: "🔖", name: "Bookmarks",         desc: "Add, edit and remove the bookmarks readers see in the sidebar." },
   { id: "watermark", ico: "💧", name: "Watermark",         desc: "Stamp text like DRAFT or CONFIDENTIAL, or a logo, on every page.", multi: true },
   { id: "numbers",   ico: "🔢", name: "Page numbers",      desc: "Add page numbers wherever you like.", multi: true },
   { id: "info",      ico: "📝", name: "Edit document info", desc: "Change the title, author and keywords, or wipe hidden metadata.", multi: true },
@@ -746,6 +748,37 @@ const STAGES = {
   },
   sign() { editorStage("sign", "fill", "-signed", "Sign & save"); },
   redact() { editorStage("redact", "redact", "-redacted", "Apply redactions"); },
+  crop() { editorStage("crop", "crop", "-cropped", "Crop"); },
+  bookmarks() {
+    put(dropzone(), fileList());
+    const f = ready()[0]; if (!f) return;
+    const st = (STAGES.bookmarks.o ??= {}); if (st.for !== f) Object.assign(st, { for: f, items: f.doc.bookmarks() });
+    const items = st.items;
+    const panel = el("div", { class: "panel" }, el("h3", {}, items.length ? "Bookmarks" : "This file has no bookmarks yet"));
+    const render = (list, depth, parent) => {
+      const ul = el("ul", { class: "bmlist", style: `margin-left:${depth ? 18 : 0}px` });
+      list.forEach((b, i) => {
+        const li = el("li", { class: "bm" },
+          el("input", { type: "text", value: b.title, placeholder: "Title", "aria-label": "Bookmark title", oninput: (e) => (b.title = e.target.value) }),
+          el("label", { class: "bmpage" }, "page ", el("input", { type: "number", min: 1, max: f.pages, value: b.page != null ? b.page + 1 : "", "aria-label": "Page number", oninput: (e) => { const v = +e.target.value; b.page = v >= 1 && v <= f.pages ? v - 1 : null; } })),
+          el("div", { class: "actions" },
+            el("button", { class: "iconbtn", title: "Move up", "aria-label": "Move up", disabled: i === 0, onclick: () => { [list[i - 1], list[i]] = [list[i], list[i - 1]]; renderStage(); } }, "↑"),
+            el("button", { class: "iconbtn", title: "Move down", "aria-label": "Move down", disabled: i === list.length - 1, onclick: () => { [list[i + 1], list[i]] = [list[i], list[i + 1]]; renderStage(); } }, "↓"),
+            el("button", { class: "iconbtn", title: "Add a bookmark underneath", "aria-label": "Add child", onclick: () => { b.children ??= []; b.children.push({ title: "New bookmark", page: b.page ?? 0, open: true, children: [] }); renderStage(); } }, "＋"),
+            el("button", { class: "iconbtn", title: "Remove", "aria-label": "Remove", onclick: () => { list.splice(i, 1); renderStage(); } }, "✕")));
+        if (b.children?.length) li.append(render(b.children, depth + 1, b));
+        ul.append(li);
+      });
+      void parent; return ul;
+    };
+    panel.append(render(items, 0, null),
+      el("div", { class: "row", style: "margin-top:12px" },
+        el("button", { class: "btn small", onclick: () => { items.push({ title: "New bookmark", page: 0, open: true, children: [] }); renderStage(); } }, "+ Add bookmark"),
+        el("button", { class: "btn small", onclick: () => { for (let p = 0; p < f.pages; p++) items.push({ title: `Page ${p + 1}`, page: p, open: true, children: [] }); renderStage(); } }, "Add one per page"),
+        el("button", { class: "btn small", disabled: !items.length, onclick: () => { items.length = 0; renderStage(); } }, "Remove all")),
+      el("p", { class: "summary", style: "margin:10px 0 0" }, "Bookmarks appear in the reader's sidebar and jump to a page. Nest them with the + button to make sections."));
+    put(panel, cta("Save bookmarks", () => runJob("Saving", () => perFile("-bookmarked", (doc) => { const clean = (l) => l.filter((b) => b.title.trim()).map((b) => ({ ...b, title: b.title.trim(), children: clean(b.children || []) })); doc.setBookmarks(clean(items)); }))));
+  },
   extract() {
     put(dropzone(), fileList(), summaryLine());
     if (!ready().length) return;
@@ -792,14 +825,15 @@ function editorStage(toolId, mode, suffix, label) {
   };
   mount();
   const opts = el("div", { class: "row" });
-  if (mode === "redact") { o.fill ??= "#000000"; o.strip ??= true; opts.append(field("Box colour", segmented([["#000000", "Black"], ["#ffffff", "White"], ["none", "No box, just remove"]], o.fill, (v) => (o.fill = v), "Box colour")), check("Also wipe hidden metadata (author, title, editing history)", o.strip, (v) => (o.strip = v))); saveBar.append(el("p", { class: "summary", style: "margin:0 0 10px" }, "Redaction is permanent: the text, drawings and image pixels under each box are deleted from the file, not hidden. Check the result before sharing it.")); }
+  if (mode === "crop") { o.cropAll ??= true; opts.append(field("Apply to", segmented([[true, "Every page"], [false, "Only the page I marked"]], o.cropAll, (v) => (o.cropAll = v), "Apply to"), "The same area is used on every page; pages of a different size are clipped to it.")); }
+  else if (mode === "redact") { o.fill ??= "#000000"; o.strip ??= true; opts.append(field("Box colour", segmented([["#000000", "Black"], ["#ffffff", "White"], ["none", "No box, just remove"]], o.fill, (v) => (o.fill = v), "Box colour")), check("Also wipe hidden metadata (author, title, editing history)", o.strip, (v) => (o.strip = v))); saveBar.append(el("p", { class: "summary", style: "margin:0 0 10px" }, "Redaction is permanent: the text, drawings and image pixels under each box are deleted from the file, not hidden. Check the result before sharing it.")); }
   else if (mode === "annotate") opts.append(check("Flatten: burn the comments into the page so they can't be edited or removed", o.flatten, (v) => (o.flatten = v)), field("Your name (shown on comments, optional)", el("input", { type: "text", value: o.author, placeholder: "e.g. Ada", oninput: (e) => (o.author = e.target.value) })));
   else if (mode === "forms") opts.append(check("Flatten: make the filled form permanent (fields can no longer be changed)", o.flatten, (v) => (o.flatten = v)));
   else opts.append(el("p", { class: "summary", style: "margin:0" }, "Everything you add becomes a permanent part of the page, like ink on paper."));
   saveBar.append(el("h3", {}, "Save"), opts,
     cta(label, () => runJob(mode === "redact" ? "Redacting" : "Saving", () => perFile(suffix, (doc, f, out) => {
-      const n = editor.api.apply(doc, { flatten: o.flatten, author: o.author, fill: o.fill, strip: o.strip });
-      if (!n) throw new Error(mode === "forms" ? "Nothing was filled in yet." : mode === "redact" ? "Nothing is marked yet. Drag a box over the page or find a word first." : "Nothing has been added yet. Use the tools above the page first.");
+      const n = editor.api.apply(doc, { flatten: o.flatten, author: o.author, fill: o.fill, strip: o.strip, cropAll: o.cropAll });
+      if (!n) throw new Error(mode === "forms" ? "Nothing was filled in yet." : mode === "redact" ? "Nothing is marked yet. Drag a box over the page or find a word first." : mode === "crop" ? "Drag the area to keep on a page first." : "Nothing has been added yet. Use the tools above the page first.");
       if (mode === "redact" && editor.api.lastReport) { const r = editor.api.lastReport; out.note = `Removed ${plural(r.glyphsRemoved, "character")}, ${plural(r.pathsRemoved, "drawing")}, ${r.imagesRemoved + r.imagesEdited} image${r.imagesRemoved + r.imagesEdited === 1 ? "" : "s"} and ${plural(r.annotationsRemoved, "annotation")}.` + (r.warnings.length ? " " + r.warnings[0] : ""); }
     }))));
 }

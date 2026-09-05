@@ -36,6 +36,7 @@
 //! * [`text`] – extract text with positions, and search.
 //! * [`redact`] – remove text, graphics and image pixels under an area.
 //! * [`compress`] – downsample and re-encode images for much smaller files.
+//! * [`outline`] – read and write bookmarks.
 //! * [`batch`] – run a JSON-described pipeline over many files; store and
 //!   reuse export presets.
 //! * [`object`] – the low-level object model when you need full control.
@@ -72,6 +73,7 @@ pub mod imgcodec;
 pub mod lexer;
 pub mod object;
 pub mod ops;
+pub mod outline;
 pub mod page;
 pub mod parser;
 pub mod redact;

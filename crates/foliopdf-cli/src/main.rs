@@ -34,6 +34,9 @@ COMMANDS
                               [--pages all]
   reverse  <in.pdf> <out.pdf>
   blank    <in.pdf> <out.pdf> [--at N] [--count 1] [--size a4]   Insert blank pages before page N
+  crop     <in.pdf> <out.pdf> --box x,y,w,h [--pages all] | --reset
+  bookmarks <in.pdf> [--json]              List bookmarks
+  bookmarks <in.pdf> <out.pdf> --set tree.json | --clear
   compress <in.pdf> <out.pdf> [--level 1-10] [--strip-metadata]
                               [--images [--dpi 150] [--quality 75] [--keep-lossless]]
   encrypt  <in.pdf> <out.pdf> [--user PW] [--owner PW] [--method aes256|aes128|rc4]
@@ -183,6 +186,8 @@ fn run(argv: &[String]) -> Result<(), String> {
         "resize" => resize(&args),
         "reverse" => reverse(&args),
         "blank" => blank(&args),
+        "crop" => crop_cmd(&args),
+        "bookmarks" => bookmarks_cmd(&args),
         "compress" => compress(&args),
         "encrypt" => encrypt(&args),
         "decrypt" => decrypt(&args),
@@ -487,6 +492,72 @@ fn blank(args: &Args) -> Result<(), String> {
     };
     ops::insert_blank_pages(&mut doc, at, count.max(1), size).map_err(|e| e.to_string())?;
     write(&mut doc, out, &save_opts(args)?)
+}
+
+fn crop_cmd(args: &Args) -> Result<(), String> {
+    let (input, out) = (args.pos(1, "input file")?, args.pos(2, "output file")?);
+    let mut doc = load(args, input)?;
+    let idx = range(args, &doc, "pages")?;
+    if args.has("reset") {
+        ops::uncrop_pages(&mut doc, &idx).map_err(|e| e.to_string())?;
+    } else {
+        let b = args.flag("box").ok_or("crop needs --box x,y,w,h (points from the bottom-left of the displayed page) or --reset")?;
+        let v: Vec<f64> = b.split(',').filter_map(|x| x.trim().parse().ok()).collect();
+        if v.len() != 4 {
+            return Err("--box expects x,y,w,h".into());
+        }
+        ops::crop_pages(
+            &mut doc,
+            &idx,
+            foliopdf::Rect::from_xywh(v[0], v[1], v[2], v[3]),
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    write(&mut doc, out, &save_opts(args)?)
+}
+
+fn bookmarks_cmd(args: &Args) -> Result<(), String> {
+    let input = args.pos(1, "input file")?;
+    let mut doc = load(args, input)?;
+    if let Some(out) = args.positional.get(2) {
+        if args.has("clear") {
+            foliopdf::outline::set_bookmarks(&mut doc, &[]).map_err(|e| e.to_string())?;
+        } else {
+            let path = args
+                .flag("set")
+                .ok_or("bookmarks needs --set tree.json or --clear when writing")?;
+            let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
+            let items: Vec<foliopdf::outline::Bookmark> =
+                serde_json::from_str(&text).map_err(|e| format!("{path}: {e}"))?;
+            foliopdf::outline::set_bookmarks(&mut doc, &items).map_err(|e| e.to_string())?;
+        }
+        return write(&mut doc, out, &save_opts(args)?);
+    }
+    let items = foliopdf::outline::bookmarks(&doc);
+    if args.has("json") {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&items).map_err(|e| e.to_string())?
+        );
+        return Ok(());
+    }
+    if items.is_empty() {
+        println!("no bookmarks");
+        return Ok(());
+    }
+    fn show(items: &[foliopdf::outline::Bookmark], depth: usize) {
+        for b in items {
+            let target = match (b.page, &b.uri) {
+                (Some(p), _) => format!("p{}", p + 1),
+                (None, Some(u)) => u.clone(),
+                _ => "-".into(),
+            };
+            println!("{}{}  ({target})", "  ".repeat(depth), b.title);
+            show(&b.children, depth + 1);
+        }
+    }
+    show(&items, 0);
+    Ok(())
 }
 
 fn compress(args: &Args) -> Result<(), String> {

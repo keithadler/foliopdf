@@ -22,6 +22,11 @@ const MODES = {
     tools: [["select", "Select", "↖"], ["area", "Mark area", "▮"], ["find", "Find text", "🔍"]],
     hint: "Drag boxes over anything that must disappear, or find a word and mark every occurrence. Applying removes the text, graphics and image pixels underneath for good.",
   },
+  crop: {
+    title: "Crop",
+    tools: [["select", "Select", "↖"], ["area", "Crop area", "⌗"]],
+    hint: "Drag the area to keep on one page. Apply it to that page only or to every page. Cropping hides the margins; it does not delete anything.",
+  },
   forms: {
     title: "Fill a form",
     tools: [["select", "Select", "↖"], ["sign", "Signature", "✍︎"], ["text", "Text", "T"]],
@@ -50,7 +55,7 @@ export async function createEditor(entry, mode, opts = {}) {
   const state = {
     items: opts.items ? JSON.parse(JSON.stringify(opts.items)) : [],
     values: opts.values ? { ...opts.values } : Object.fromEntries(fields.map((f) => [f.name, f.kind === "list" ? f.values : f.value])),
-    tool: mode === "forms" ? "select" : mode === "fill" ? "text" : mode === "redact" ? "area" : "highlight",
+    tool: mode === "forms" ? "select" : mode === "fill" ? "text" : mode === "redact" || mode === "crop" ? "area" : "highlight",
     redactFill: "#000000", findText: "", findCase: false,
     selected: null, zoom: 1, undo: [], redo: [], color: {}, penWidth: 2, textSize: 12,
     signature: opts.signature || null, initials: opts.initials || null,
@@ -119,6 +124,10 @@ export async function createEditor(entry, mode, opts = {}) {
     } else if (kind === "image" || kind === "sign" || kind === "initials") {
       if (it) propbar.append(el("span", { class: "hint" }, "Drag to move, use the corner to resize."));
       else propbar.append(el("span", { class: "hint" }, state.tool === "image" ? "Click on the page to place the image." : "Click on the page to place it. Click again to place another copy."), el("button", { type: "button", class: "btn small", onclick: () => openSignature(state.tool === "initials") }, "Change"));
+    } else if (mode === "crop") {
+      const c = state.items.find((i) => i.kind === "crop");
+      propbar.append(el("span", { class: "hint" }, c ? `Crop on page ${c.page + 1}: ${Math.round(c.w)} × ${Math.round(c.h)} pt. Drag the corner to adjust.` : "Drag on a page to mark the area to keep."));
+      if (c) propbar.append(el("button", { type: "button", class: "btn small", onclick: () => { snapshot(); state.items = []; state.selected = null; renderAll(); } }, "Clear"));
     } else if (mode === "redact" && (kind === "area" || kind === "find" || kind === "redact" || kind === "select")) {
       const marks = state.items.filter((i) => i.kind === "redact").length;
       if (kind === "find" || (kind === "select" && !it)) {
@@ -287,6 +296,11 @@ export async function createEditor(entry, mode, opts = {}) {
         }
         break;
       }
+      case "crop": {
+        box(it.x, it.y, it.w, it.h);
+        n.append(el("div", { class: "ecrop" }), handle("se"));
+        break;
+      }
       case "redact": {
         box(it.x, it.y, it.w, it.h);
         n.title = it.text ? `Will remove: ${it.text}` : "Will be removed";
@@ -308,6 +322,7 @@ export async function createEditor(entry, mode, opts = {}) {
   function wireItem(n, it) {
     n.onpointerdown = (e) => {
       if (state.tool !== "select" && !["text", "date", "sign", "initials", "image", "check", "cross", "dot", "area", "find"].includes(state.tool)) return;
+      if (it.kind === "crop" && e.target.dataset.dir !== "se" && state.tool === "area") { /* allow re-drag */ }
       if (e.target.classList.contains("etext")) return;
       e.stopPropagation(); e.preventDefault();
       select(it.id);
@@ -375,6 +390,14 @@ export async function createEditor(entry, mode, opts = {}) {
         return;
       }
       if (tool === "find") { select(null); return; }
+      if (tool === "area" && mode === "crop") {
+        snapshot(); state.items = state.items.filter((i) => i.kind !== "crop"); renderAll();
+        const it = { kind: "crop", page: p.index, x, y, w: 1, h: 1 };
+        addItem(it); p.ovl.setPointerCapture(e.pointerId);
+        p.ovl.onpointermove = (ev) => { const [px, py] = pagePoint(p, ev); it.x = Math.max(0, Math.min(x, px)); it.y = Math.max(0, Math.min(y, py)); it.w = Math.max(1, Math.min(p.w - it.x, Math.abs(px - x))); it.h = Math.max(1, Math.min(p.h - it.y, Math.abs(py - y))); renderItem(it); };
+        p.ovl.onpointerup = p.ovl.onpointercancel = () => { p.ovl.onpointermove = null; if (it.w < 10 || it.h < 10) { state.items = state.items.filter((i) => i !== it); itemNode(it)?.remove(); } else select(it.id); renderProps(); };
+        return;
+      }
       if (tool === "area") {
         const it = { kind: "redact", page: p.index, x, y, w: 1, h: 1 };
         addItem(it); p.ovl.setPointerCapture(e.pointerId);
@@ -530,10 +553,20 @@ export async function createEditor(entry, mode, opts = {}) {
    * file). `flatten`: burn everything into the page content. Returns the
    * number of things written.
    */
-  function apply(doc, { flatten = true, author = "", fill = "#000000", strip = false } = {}) {
+  function apply(doc, { flatten = true, author = "", fill = "#000000", strip = false, cropAll = true } = {}) {
     const meta = { modified: pdfDate(), ...(author ? { author } : {}) };
     const created = [];
     let n = 0;
+    if (mode === "crop") {
+      const c = state.items.find((i) => i.kind === "crop"); if (!c) return 0;
+      const rect = { x0: c.x, y0: c.y, x1: c.x + c.w, y1: c.y + c.h };
+      if (cropAll) {
+        // Same area on every page, clipped to each page's own size.
+        for (const p of pages) { const r = { x0: Math.min(rect.x0, p.w - 1), y0: Math.min(rect.y0, p.h - 1), x1: Math.min(rect.x1, p.w), y1: Math.min(rect.y1, p.h) }; if (r.x1 - r.x0 > 1 && r.y1 - r.y0 > 1) doc.cropPages(String(p.index + 1), r); }
+        return pages.length;
+      }
+      doc.cropPages(String(c.page + 1), rect); return 1;
+    }
     if (mode === "redact") {
       const byPage = new Map();
       for (const it of state.items) if (it.kind === "redact") { if (!byPage.has(it.page)) byPage.set(it.page, []); byPage.get(it.page).push({ x0: it.x, y0: it.y, x1: it.x + it.w, y1: it.y + it.h }); }

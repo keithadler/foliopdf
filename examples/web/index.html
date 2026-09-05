@@ -249,6 +249,14 @@
   .eitem.redact.sel .eredact { background: rgba(220, 38, 38, .45); }
   .epages[data-tool="area"] .eovl { cursor: crosshair; }
   .tpreview { width: 100%; max-height: 260px; overflow: auto; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-word; margin: 4px 0 0; text-align: left; }
+  .eitem .ecrop { position: absolute; inset: 0; border: 2px dashed #2563eb; box-shadow: 0 0 0 9999px rgba(15, 23, 42, .45); box-sizing: border-box; }
+  .eitem.crop { cursor: move; }
+  .bmlist { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+  .bm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .bm > input[type=text] { flex: 1; min-width: 160px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: inherit; font: inherit; }
+  .bmpage { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--muted); } .bmpage input { width: 64px; padding: 7px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: inherit; }
+  .bm .actions { display: flex; gap: 3px; } .bm .actions .iconbtn { width: 30px; height: 30px; font-size: 13px; }
+  .bm > .bmlist { width: 100%; margin-top: 4px; }
   .eitem .enote { position: absolute; inset: 0; border-radius: 4px; display: grid; place-items: center; font-size: 13px; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
   .ehandle { position: absolute; width: 12px; height: 12px; background: #fff; border: 2px solid #2563eb; border-radius: 50%; display: none; z-index: 3; }
   .eitem.sel .ehandle { display: block; } .ehandle.se { right: -7px; bottom: -7px; cursor: nwse-resize; } .ehandle.e { right: -7px; top: 50%; margin-top: -6px; cursor: ew-resize; }

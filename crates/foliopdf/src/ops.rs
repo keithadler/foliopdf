@@ -559,6 +559,46 @@ Q
     Ok(())
 }
 
+/// Crops pages to `area`, given in display space (points from the
+/// bottom-left of the page as shown). Sets the crop box, which is what
+/// viewers and printers show; the content outside it stays in the file
+/// (use [`crate::redact`] to remove content).
+pub fn crop_pages(doc: &mut Document, pages: &[usize], area: Rect) -> Result<()> {
+    if !(area.width() > 1.0 && area.height() > 1.0) {
+        return Err(Error::Preset(
+            "crop area must be larger than 1 point".into(),
+        ));
+    }
+    for &i in pages {
+        let info = doc.page_info(i)?;
+        let user = crate::annot::to_user_rect(&info, &area);
+        let clipped = user
+            .intersection(&info.media_box)
+            .ok_or_else(|| Error::Preset(format!("crop area lies outside page {}", i + 1)))?;
+        let page = doc.page_ref(i)?;
+        let d = doc
+            .get_mut(page)
+            .and_then(Object::as_dict_mut)
+            .ok_or_else(|| Error::malformed("page is not a dictionary"))?;
+        d.set("CropBox", clipped.to_object());
+        d.remove("TrimBox");
+        d.remove("ArtBox");
+        d.remove("BleedBox");
+    }
+    Ok(())
+}
+
+/// Removes any crop box so the whole media box shows again.
+pub fn uncrop_pages(doc: &mut Document, pages: &[usize]) -> Result<()> {
+    for &i in pages {
+        let page = doc.page_ref(i)?;
+        if let Some(d) = doc.get_mut(page).and_then(Object::as_dict_mut) {
+            d.remove("CropBox");
+        }
+    }
+    Ok(())
+}
+
 /// Scales pages by `factor` (1.0 leaves them unchanged), keeping the aspect
 /// ratio. The page box grows or shrinks with the content.
 pub fn scale_pages(doc: &mut Document, pages: &[usize], factor: f64) -> Result<()> {
@@ -798,6 +838,28 @@ mod tests {
         assert!((doc.page_info(1).unwrap().media_box.width() - 595.28).abs() < 0.01);
         reverse_pages(&mut doc).unwrap();
         assert!((doc.page_info(2).unwrap().media_box.width() - 595.28).abs() < 0.01);
+    }
+
+    #[test]
+    fn crop() {
+        use crate::Document;
+        let mut doc = Document::new();
+        doc.add_page(PageSize::LETTER);
+        crop_pages(&mut doc, &[0], Rect::new(50.0, 100.0, 300.0, 400.0)).unwrap();
+        let info = doc.page_info(0).unwrap();
+        assert_eq!(info.crop_box, Some(Rect::new(50.0, 100.0, 300.0, 400.0)));
+        assert_eq!(info.display_width(), 250.0);
+        // Rotated page: display coordinates map through the rotation.
+        doc.rotate_page(0, 90).unwrap();
+        crop_pages(&mut doc, &[0], Rect::new(0.0, 0.0, 100.0, 50.0)).unwrap();
+        let info = doc.page_info(0).unwrap();
+        assert!(
+            (info.display_width() - 100.0).abs() < 1e-9
+                && (info.display_height() - 50.0).abs() < 1e-9
+        );
+        uncrop_pages(&mut doc, &[0]).unwrap();
+        assert_eq!(doc.page_info(0).unwrap().crop_box, None);
+        assert!(crop_pages(&mut doc, &[0], Rect::new(0.0, 0.0, 0.5, 0.5)).is_err());
     }
 
     #[test]

@@ -12,6 +12,7 @@ use foliopdf::document::Metadata;
 use foliopdf::forms::{self, FieldValue, NewField};
 use foliopdf::geometry::{Point, Rect};
 use foliopdf::ops::{self, FitMode, ImagePageOptions, ImageStamp, PageNumbers, TextStamp};
+use foliopdf::outline::{self, Bookmark};
 use foliopdf::redact::{self, RedactOptions};
 use foliopdf::text::{self, SearchOptions};
 use foliopdf::{Document, LoadOptions, PageSize, SaveOptions};
@@ -253,6 +254,21 @@ export interface ImagePageOptions {
   margin?: number;
 }
 
+/** A bookmark (outline entry). */
+export interface Bookmark {
+  title: string;
+  /** 0-based page; omit for a heading or a link. */
+  page?: number | null;
+  /** Points from the bottom of the page to scroll to. */
+  top?: number | null;
+  uri?: string | null;
+  /** Show children expanded. Default true. */
+  open?: boolean;
+  /** 1 italic, 2 bold. */
+  style?: number;
+  children?: Bookmark[];
+}
+
 export interface BatchInput { name: string; data: Uint8Array; password?: string }
 export interface BatchAsset { name: string; data: Uint8Array }
 export interface BatchOutput { name: string; data: Uint8Array; pages: number; bytes: number; sources: string[] }
@@ -307,6 +323,8 @@ extern "C" {
     pub type ImageReportJs;
     #[wasm_bindgen(typescript_type = "ImagePageOptions | undefined")]
     pub type ImagePageOptionsJs;
+    #[wasm_bindgen(typescript_type = "Bookmark[]")]
+    pub type BookmarkArrayJs;
     #[wasm_bindgen(typescript_type = "Metadata")]
     pub type MetadataJs;
     #[wasm_bindgen(typescript_type = "PageInfo[]")]
@@ -845,6 +863,76 @@ impl PdfDocument {
     ) -> Result<usize, JsError> {
         let o: ImagePageOptions = from_js(options.into())?;
         ops::add_image_page(&mut self.inner, image, &o).map_err(err)
+    }
+
+    /// The bookmark tree.
+    pub fn bookmarks(&self) -> Result<BookmarkArrayJs, JsError> {
+        Ok(to_js(&outline::bookmarks(&self.inner))?.unchecked_into())
+    }
+
+    /// Replaces the bookmark tree (an empty list removes it).
+    #[wasm_bindgen(js_name = setBookmarks)]
+    pub fn set_bookmarks(&mut self, bookmarks: BookmarkArrayJs) -> Result<(), JsError> {
+        #[derive(serde::Deserialize)]
+        #[serde(default, rename_all = "camelCase")]
+        struct B {
+            title: String,
+            page: Option<usize>,
+            top: Option<f64>,
+            uri: Option<String>,
+            open: bool,
+            style: u8,
+            children: Vec<B>,
+        }
+        impl Default for B {
+            fn default() -> Self {
+                Self {
+                    title: String::new(),
+                    page: None,
+                    top: None,
+                    uri: None,
+                    open: true,
+                    style: 0,
+                    children: Vec::new(),
+                }
+            }
+        }
+        fn conv(b: B) -> Bookmark {
+            Bookmark {
+                title: b.title,
+                page: b.page,
+                top: b.top,
+                uri: b.uri,
+                open: b.open,
+                style: b.style & 3,
+                children: b.children.into_iter().map(conv).collect(),
+            }
+        }
+        let list: Vec<B> = serde_wasm_bindgen::from_value(bookmarks.into())
+            .map_err(|e| JsError::new(&format!("invalid bookmarks: {e}")))?;
+        let items: Vec<Bookmark> = list.into_iter().map(conv).collect();
+        outline::set_bookmarks(&mut self.inner, &items).map_err(err)
+    }
+
+    /// Crops pages (null = all) to `rect` in screen coordinates. Content
+    /// outside stays in the file; use `redact` to remove it.
+    #[wasm_bindgen(js_name = cropPages)]
+    pub fn crop_pages(&mut self, pages: Option<String>, rect: RectJs) -> Result<(), JsError> {
+        let r: Rect = serde_wasm_bindgen::from_value(rect.into())
+            .map_err(|e| JsError::new(&format!("invalid rect: {e}")))?;
+        let idx = self.range(pages)?;
+        for &i in &idx {
+            let h = self.display_height(i)?;
+            ops::crop_pages(&mut self.inner, &[i], flip_rect(&r, h)).map_err(err)?;
+        }
+        Ok(())
+    }
+
+    /// Removes crop boxes so the whole page shows again.
+    #[wasm_bindgen(js_name = uncropPages)]
+    pub fn uncrop_pages(&mut self, pages: Option<String>) -> Result<(), JsError> {
+        let idx = self.range(pages)?;
+        ops::uncrop_pages(&mut self.inner, &idx).map_err(err)
     }
 
     fn display_height(&self, page: usize) -> Result<f64, JsError> {

@@ -72,6 +72,29 @@ let idx = parse_page_ranges("1-3,7,odd,last,r2", doc.page_count())?;   // 0-base
 Grammar: `N`, `N-M`, `N-`, `-M`, `all`, `first`, `last`, `even`, `odd`, `rN`
 (N-th from the end). Order is preserved; duplicates are kept.
 
+## Crop
+
+```rust
+ops::crop_pages(&mut doc, &[0, 1], Rect::new(36.0, 36.0, 576.0, 756.0))?;   // display space
+ops::uncrop_pages(&mut doc, &[0])?;
+```
+
+## Bookmarks
+
+```rust
+use foliopdf::outline::{self, Bookmark};
+let tree = outline::bookmarks(&doc);                                  // Vec<Bookmark>, nested
+outline::set_bookmarks(&mut doc, &[
+    Bookmark::new("Introduction", 0).with_child(Bookmark { top: Some(500.0), ..Bookmark::new("Scope", 0) }),
+    Bookmark::new("Results", 4),
+])?;
+```
+
+Bookmarks follow their pages through `import_pages`, `merge`, `extract`
+and `select_pages`; entries whose page is gone are dropped and their
+children move up a level. Named destinations (`/Dests` and the names
+tree) are resolved when reading.
+
 ## Merge, split, extract
 
 ```rust

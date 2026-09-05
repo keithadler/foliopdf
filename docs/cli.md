@@ -55,6 +55,25 @@ centres it, `fill` crops the overflow, `stretch` distorts to fill exactly.
 `--scale` multiplies both the page and its content.
 
 ```
+folio crop <in.pdf> <out.pdf> --box 36,36,540,720 [--pages all]
+folio crop <in.pdf> <out.pdf> --reset
+```
+Sets the crop box (x, y, width, height in points from the bottom-left of
+the displayed page); readers and printers show only that area. The
+content outside stays in the file; `redact` removes it. `--reset` shows
+the whole page again.
+
+```
+folio bookmarks <in.pdf> [--json]
+folio bookmarks <in.pdf> <out.pdf> --set tree.json
+folio bookmarks <in.pdf> <out.pdf> --clear
+```
+Lists or replaces the bookmarks (the outline in the reader's sidebar).
+`tree.json` is an array of `{ "title", "page" (0-based), "top"?, "uri"?,
+"open"?, "children"? }` objects, the same shape `--json`
+prints. Bookmarks survive `merge`, `split` and `pages --select`.
+
+```
 folio reverse <in.pdf> <out.pdf>
 folio blank <in.pdf> <out.pdf> [--at N] [--count 1] [--size a4]
 ```
