@@ -6,6 +6,12 @@
 <title>foliopdf — free PDF tools that stay on your device</title>
 <meta name="description" content="Fill and sign PDFs, fill forms, add comments, merge, split, compress, protect, unlock, rotate, watermark and number PDFs in your browser. Free, open source, and nothing is uploaded.">
 <meta name="theme-color" content="#2563eb">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="foliopdf">
+<meta name="mobile-web-app-capable" content="yes">
 <script>
   // Apply the saved theme before first paint to avoid a flash.
   (function () { try { var t = localStorage.getItem("foliopdf.theme"); var dark = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches); document.documentElement.dataset.theme = dark ? "dark" : "light"; } catch (e) { document.documentElement.dataset.theme = "light"; } })();
@@ -253,6 +259,8 @@
   .esigpreview { margin-top: 12px; background: #fff; border-radius: 10px; min-height: 90px; display: grid; place-items: center; font-size: 44px; padding: 8px 16px; overflow: hidden; }
   .esigimg { max-width: 100%; max-height: 160px; margin-top: 10px; background: #fff; display: block; }
   @media (max-width: 600px) { .etool { min-width: 44px; } .etool .elabel { display: none; } .epages { padding: 8px; max-height: 70vh; } }
+  .build { color: var(--muted); opacity: .8; }
+  .update { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--card); color: var(--ink); border: 1px solid var(--accent); padding: 12px 16px; border-radius: 12px; box-shadow: var(--shadow); z-index: 61; display: flex; gap: 12px; align-items: center; font-size: 15px; max-width: calc(100% - 32px); }
   .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: 15px; box-shadow: var(--shadow); z-index: 60; opacity: 0; transition: opacity .2s; pointer-events: none; }
   .toast.show { opacity: 1; }
   @media (max-width: 600px) {
@@ -272,7 +280,7 @@
       <svg viewBox="0 0 28 28" fill="none" aria-hidden="true"><rect x="3" y="2" width="18" height="24" rx="3" fill="var(--accent)"/><path d="M15 2v7h6" fill="var(--accent-soft)"/><rect x="7" y="13" width="10" height="2" rx="1" fill="#fff"/><rect x="7" y="17" width="8" height="2" rx="1" fill="#fff"/></svg>
       foliopdf <small>free PDF tools</small>
     </a>
-    <nav><a href="https://github.com/keithadler/foliopdf" target="_blank" rel="noopener">Open source</a><a href="#batch">Advanced</a><button class="theme" id="theme" type="button" aria-label="Switch colour theme" title="Switch colour theme"><span id="theme-ico">◐</span><span id="theme-label">Auto</span></button></nav>
+    <nav><a href="https://github.com/keithadler/foliopdf" target="_blank" rel="noopener">Open source</a><a href="#batch">Advanced</a><button class="theme" id="install" type="button" hidden title="Install foliopdf as an app that works offline">⬇︎ Install app</button><button class="theme" id="theme" type="button" aria-label="Switch colour theme" title="Switch colour theme"><span id="theme-ico">◐</span><span id="theme-label">Auto</span></button></nav>
   </header>
 
   <section class="view active" id="view-home">
@@ -283,7 +291,7 @@
     </div>
     <div class="grid" id="tools"></div>
     <div class="why3">
-      <div><b>Private by design</b>Your files are processed on this device by WebAssembly. Turn off Wi-Fi and it still works.</div>
+      <div><b>Private by design</b>Your files are processed on this device by WebAssembly. Turn off Wi-Fi and it still works. Install it as an app and it opens like any other program, offline too, and updates itself when a new version ships.</div>
       <div><b>No accounts, no limits</b>No sign-up, no file-size cap, no daily quota, no watermark unless you add one.</div>
       <div><b>Open source, MIT</b>Read the code, host it yourself, or use the same engine from Rust, JavaScript or the command line.</div>
     </div>
@@ -296,7 +304,7 @@
   </section>
 
   <footer>
-    <span>foliopdf <span id="ver"></span> · MIT licence · <a href="https://github.com/keithadler/foliopdf">GitHub</a> · <a href="https://github.com/keithadler/foliopdf/issues">Report a problem</a></span>
+    <span>foliopdf <span id="ver"></span> <span id="build" class="build"></span> · MIT licence · <a href="https://github.com/keithadler/foliopdf">GitHub</a> · <a href="https://github.com/keithadler/foliopdf/issues">Report a problem</a></span>
     <span>Free, no ads, no accounts. If it saved you a subscription, a tip is welcome: <a href="https://venmo.com/u/Keith-Adler-1" target="_blank" rel="noopener">Venmo @Keith-Adler-1</a></span>
     <span>Bytes uploaded to any server: <b>0</b></span>
   </footer>

@@ -1,10 +1,30 @@
-import init, { PdfDocument, runBatch, PresetStore, parsePageRanges, version } from "./pkg/foliopdf.js";
+import init, { PdfDocument, runBatch, PresetStore, parsePageRanges, version, imagesToPdf } from "./pkg/foliopdf.js";
 import { thumbnailer } from "./thumbs.js?v=dev";
 import { batchStage } from "./batch.js?v=dev";
 import { createEditor } from "./editor.js?v=dev";
 export { PdfDocument, runBatch, PresetStore, parsePageRanges };
 
 // ---------------------------------------------------------------- helpers
+// Minimal ZIP writer (no compression): images are already compressed.
+const CRC_TABLE = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(b) { let c = 0xffffffff; for (let i = 0; i < b.length; i++) c = CRC_TABLE[(c ^ b[i]) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; }
+export function zip(items) {
+  const enc = new TextEncoder(); const parts = []; const central = []; let offset = 0;
+  const d = new Date(); const dosTime = ((d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1)) & 0xffff; const dosDate = (((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate()) & 0xffff;
+  const u32 = (v) => [v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255]; const u16 = (v) => [v & 255, (v >>> 8) & 255];
+  for (const it of items) {
+    const name = enc.encode(it.name); const crc = crc32(it.data);
+    const local = new Uint8Array([...u32(0x04034b50), ...u16(20), ...u16(0x800), ...u16(0), ...u16(dosTime), ...u16(dosDate), ...u32(crc), ...u32(it.data.length), ...u32(it.data.length), ...u16(name.length), ...u16(0), ...name]);
+    parts.push(local, it.data);
+    central.push(new Uint8Array([...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0x800), ...u16(0), ...u16(dosTime), ...u16(dosDate), ...u32(crc), ...u32(it.data.length), ...u32(it.data.length), ...u16(name.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(offset), ...name]));
+    offset += local.length + it.data.length;
+  }
+  const cdSize = central.reduce((a, c) => a + c.length, 0);
+  const end = new Uint8Array([...u32(0x06054b50), ...u16(0), ...u16(0), ...u16(items.length), ...u16(items.length), ...u32(cdSize), ...u32(offset), ...u16(0)]);
+  const total = offset + cdSize + end.length; const out = new Uint8Array(total); let p = 0;
+  for (const c of [...parts, ...central, end]) { out.set(c, p); p += c.length; }
+  return out;
+}
 const PAPER = [["Letter", 612, 792], ["Legal", 612, 1008], ["Tabloid", 792, 1224], ["A3", 841.89, 1190.55], ["A4", 595.28, 841.89], ["A5", 419.53, 595.28]];
 /** "A4", "Letter (landscape)" or "8.5 × 11 in" for a page of w × h points. */
 export function sizeLabel(w, h) {
@@ -61,6 +81,8 @@ const TOOLS = [
   { id: "redact",    ico: "⬛", name: "Redact",            desc: "Black out words, numbers or areas so they are truly gone from the file, not just covered." },
   { id: "extract",   ico: "📄", name: "Extract text",      desc: "Pull the text out of a PDF as a plain text file you can search or paste anywhere.", multi: true },
   { id: "merge",     ico: "🧩", name: "Merge PDFs",        desc: "Combine several files into one, in the order you choose.", multi: true },
+  { id: "images",    ico: "🖼️", name: "Images to PDF",     desc: "Turn photos, scans and screenshots (JPEG, PNG, WebP, HEIC…) into one PDF.", multi: true, accept: "image" },
+  { id: "toimages",  ico: "🏞️", name: "PDF to images",     desc: "Save every page as a PNG or JPEG picture." },
   { id: "split",     ico: "✂️", name: "Split PDF",         desc: "Break a file into parts, or pull out just the pages you need." },
   { id: "compress",  ico: "🗜️", name: "Compress PDF",      desc: "Make files smaller without touching the quality of scans or photos.", multi: true },
   { id: "protect",   ico: "🔒", name: "Protect PDF",       desc: "Add a password and stop copying, printing or editing.", multi: true },
@@ -83,15 +105,42 @@ export const getFiles = () => files;
 let engineOk = false;
 
 // ---------------------------------------------------------------- boot
+const BUILD = "__VERSION__"; // stamped at deploy time (short commit hash)
 try {
   await init();
   engineOk = true;
   $("#status").textContent = "Ready · works offline · v" + version();
   $("#ver").textContent = "v" + version();
+  if (BUILD !== "__VERSION__") $("#build").textContent = "· build " + BUILD;
 } catch (e) {
   $("#status").textContent = "The PDF engine could not load. Try a current browser (Chrome, Edge, Firefox, Safari 15+).";
   $("#status").classList.add("bad");
 }
+// Installable app: register the service worker, offer "Install", and offer a
+// reload when a newer build has been deployed.
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
+  navigator.serviceWorker.register("./sw.js").then((reg) => {
+    const offer = () => {
+      if (!reg.waiting || $("#update")) return;
+      const bar = el("div", { class: "update", id: "update", role: "status" }, el("span", {}, "A new version of foliopdf is ready."), el("button", { class: "btn small primary", style: "font-size:14px;padding:8px 14px", onclick: () => { reg.waiting?.postMessage("SKIP_WAITING"); } }, "Update now"), el("button", { class: "iconbtn", "aria-label": "Later", onclick: () => bar.remove() }, "✕"));
+      document.body.append(bar);
+    };
+    if (reg.waiting && navigator.serviceWorker.controller) offer();
+    reg.addEventListener("updatefound", () => { const w = reg.installing; w?.addEventListener("statechange", () => { if (w.state === "installed" && navigator.serviceWorker.controller) offer(); }); });
+    // Check for a new build now and whenever the app comes back to the foreground.
+    reg.update().catch(() => {});
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") reg.update().catch(() => {}); });
+  }).catch(() => {});
+  let reloading = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (reloading) return; reloading = true; location.reload(); });
+}
+let installPrompt = null;
+window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installPrompt = e; $("#install").hidden = false; });
+$("#install").onclick = async () => { if (!installPrompt) return; installPrompt.prompt(); const r = await installPrompt.userChoice; if (r?.outcome === "accepted") { $("#install").hidden = true; toast("Installed. foliopdf now opens like any other app, offline too."); } installPrompt = null; };
+window.addEventListener("appinstalled", () => { $("#install").hidden = true; });
+// Files opened with the installed app (file_handlers in the manifest).
+if ("launchQueue" in window) window.launchQueue.setConsumer(async (params) => { const fs = []; for (const h of params.files || []) { try { fs.push(await h.getFile()); } catch {} } if (fs.length) { if (!current) open("sign"); addFiles(fs); } });
+
 // Theme: Auto (follow system) → Light → Dark.
 const THEMES = [["auto", "◐", "Auto"], ["light", "☀︎", "Light"], ["dark", "☾", "Dark"]];
 function applyTheme(t) {
@@ -138,9 +187,10 @@ export function dropzone() {
   const multi = isMulti();
   const has = files.length > 0;
   const dz = el("div", { class: "drop" + (has ? " compact" : ""), role: "button", tabindex: 0, "aria-label": has ? (multi ? "Add more PDF files" : "Choose a different PDF") : (multi ? "Drop PDF files here or choose files" : "Drop a PDF here or choose a file") });
-  if (!has) dz.append(el("div", { class: "big" }, multi ? "Drop your PDFs here" : "Drop your PDF here"), el("div", { class: "sub" }, multi ? "or choose files from your computer" : "or choose a file from your computer"), el("button", { class: "btn", tabindex: -1 }, multi ? "Choose files" : "Choose file"));
+  const noun = current?.accept === "image" ? "images" : multi ? "PDFs" : "PDF";
+  if (!has) dz.append(el("div", { class: "big" }, `Drop your ${noun} here`), el("div", { class: "sub" }, multi ? "or choose files from your computer" : "or choose a file from your computer"), el("button", { class: "btn", tabindex: -1 }, multi ? "Choose files" : "Choose file"));
   else dz.append(el("div", { class: "big" }, multi ? "Drop more files anywhere on this page" : "Drop another file to replace this one"), el("button", { class: "btn small", tabindex: -1 }, multi ? "Add files" : "Choose a different file"));
-  const pick = () => { if (!engineOk) return toast("The PDF engine isn't loaded."); $("#picker").multiple = multi; $("#picker").value = ""; $("#picker").click(); };
+  const pick = () => { if (!engineOk) return toast("The PDF engine isn't loaded."); const p = $("#picker"); p.multiple = multi; p.accept = current?.accept === "image" ? "image/*,.heic,.heif" : "application/pdf,.pdf"; p.value = ""; p.click(); };
   dz.onclick = pick; dz.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } };
   dz.ondragover = (e) => { e.preventDefault(); dz.classList.add("over"); };
   dz.ondragleave = () => dz.classList.remove("over");
@@ -150,9 +200,11 @@ export function dropzone() {
 }
 async function addFiles(list) {
   const all = [...list];
-  const pdfs = all.filter((f) => /\.pdf$/i.test(f.name) || f.type === "application/pdf");
+  const wantImages = current?.accept === "image";
+  const isImage = (f) => /\.(jpe?g|png|webp|gif|bmp|heic|heif|avif|tiff?)$/i.test(f.name) || /^image\//.test(f.type);
+  const pdfs = wantImages ? all.filter(isImage) : all.filter((f) => /\.pdf$/i.test(f.name) || f.type === "application/pdf");
   const rejected = all.length - pdfs.length;
-  if (rejected) toast(rejected === 1 ? "Only PDF files can be added here." : `${rejected} files weren't PDFs and were skipped.`);
+  if (rejected) toast(wantImages ? (rejected === 1 ? "That file isn't an image." : `${rejected} files weren't images and were skipped.`) : rejected === 1 ? "Only PDF files can be added here." : `${rejected} files weren't PDFs and were skipped.`);
   if (!pdfs.length) return;
   const multi = isMulti();
   if (!multi) freeAll();
@@ -162,8 +214,25 @@ async function addFiles(list) {
   for (const file of fresh) {
     const entry = { file, bytes: new Uint8Array(await file.arrayBuffer()), pw: "" };
     files.push(entry);
-    loadEntry(entry);
+    if (wantImages) loadImageEntry(entry); else loadEntry(entry);
   }
+  renderStage();
+}
+// Images are decoded by the browser (so HEIC/WebP/GIF work wherever the browser shows them) and handed to the engine as PNG or JPEG.
+async function loadImageEntry(entry) {
+  entry.image = true; entry.err = null; entry.doc = null;
+  const url = URL.createObjectURL(entry.file);
+  try {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error("This image couldn't be opened. Browsers can't read some formats (for example HEIC on Windows); try converting it to JPEG or PNG first.")); i.src = url; });
+    entry.w = img.naturalWidth; entry.h = img.naturalHeight;
+    const isJpeg = /^image\/jpe?g$/.test(entry.file.type) || /\.jpe?g$/i.test(entry.file.name);
+    if (isJpeg && !entry.file.name.match(/\.(heic|heif)$/i)) { entry.png = entry.bytes; entry.kind = "JPEG"; }
+    else {
+      const cv = el("canvas", { width: img.naturalWidth, height: img.naturalHeight }); cv.getContext("2d").drawImage(img, 0, 0);
+      const blob = await new Promise((r) => cv.toBlob(r, "image/png")); entry.png = new Uint8Array(await blob.arrayBuffer()); entry.kind = "PNG";
+    }
+    entry.preview = url; entry.pages = 1; entry.doc = { free() {} };
+  } catch (e) { entry.err = e.message; URL.revokeObjectURL(url); }
   renderStage();
 }
 function loadEntry(entry) {
@@ -194,14 +263,16 @@ export function fileList(opts = {}) {
       inp.onkeydown = (e) => { if (e.key === "Enter") go(); };
       info = el("div", { class: "info" + (f.wrongPw ? " err" : "") }, f.wrongPw ? "That password didn't work. " : "This file is password protected. ", el("div", { class: "pwrow" }, inp, el("button", { class: "btn small", onclick: go }, "Unlock")));
       setTimeout(() => { if (document.activeElement === document.body) inp.focus(); }, 0);
-    } else info = el("div", { class: "info" }, `${plural(f.pages, "page")} · ${kb(f.bytes.length)}` + (f.enc ? ` · protected (${f.enc})` : "") + (f.repaired ? " · repaired a damaged file" : ""));
+    } else if (f.image) info = el("div", { class: "info" }, f.w ? `${f.w} × ${f.h} px · ${kb(f.bytes.length)}` : "Reading…");
+    else info = el("div", { class: "info" }, `${plural(f.pages, "page")} · ${kb(f.bytes.length)}` + (f.enc ? ` · protected (${f.enc})` : "") + (f.repaired ? " · repaired a damaged file" : ""));
     const acts = el("div", { class: "actions" });
     if (opts.reorder) {
       acts.append(el("button", { class: "iconbtn", title: "Move up", "aria-label": "Move up", disabled: i === 0, onclick: () => { [files[i - 1], files[i]] = [files[i], files[i - 1]]; renderStage(); } }, "↑"));
       acts.append(el("button", { class: "iconbtn", title: "Move down", "aria-label": "Move down", disabled: i === files.length - 1, onclick: () => { [files[i + 1], files[i]] = [files[i], files[i + 1]]; renderStage(); } }, "↓"));
     }
     acts.append(el("button", { class: "iconbtn", title: "Remove from list", "aria-label": `Remove ${f.file.name}`, onclick: () => { try { f.doc?.free?.(); } catch {} files.splice(i, 1); renderStage(); } }, "✕"));
-    const fico = el("div", { class: "fico", "aria-hidden": true }, "PDF");
+    const fico = el("div", { class: "fico", "aria-hidden": true }, f.image ? "IMG" : "PDF");
+    if (f.image && f.preview) { fico.textContent = ""; fico.classList.add("thumb"); fico.append(el("img", { src: f.preview, alt: "", style: "width:100%;height:100%;object-fit:cover;display:block" })); }
     if (f.thumbs) f.thumbs.render(0, 44).then((cv) => { if (cv && fico.isConnected) { fico.textContent = ""; fico.classList.add("thumb"); fico.append(cv); } });
     const li = el("li", { class: "file", draggable: opts.reorder ? "true" : null }, fico, el("div", { class: "meta" }, el("div", { class: "name", title: f.file.name }, f.file.name), info), acts);
     if (opts.reorder) {
@@ -349,7 +420,7 @@ function showResults(outs, ms) {
     if (o.preview != null) btns.append(el("button", { class: "btn small", onclick: () => { navigator.clipboard?.writeText(o.preview).then(() => toast("Copied to the clipboard."), () => toast("Couldn't copy.")); } }, "Copy text"));
     else btns.append(el("a", { class: "btn small", href: url, target: "_blank", rel: "noopener", title: "Open in a new tab" }, "Preview"));
     btns.append(el("a", { class: "btn small primary", style: "font-size:14px;padding:8px 14px", href: url, download: o.name }, "Download"));
-    const card = el("div", { class: "out" }, el("div", { class: "fico", "aria-hidden": true }, o.mime === "text/plain" ? "TXT" : "PDF"), meta, btns);
+    const card = el("div", { class: "out" }, el("div", { class: "fico", "aria-hidden": true }, o.mime === "text/plain" ? "TXT" : o.mime === "application/zip" ? "ZIP" : /^image\//.test(o.mime || "") ? "IMG" : "PDF"), meta, btns);
     if (o.preview != null) card.append(el("pre", { class: "tpreview" }, o.preview.length > 4000 ? o.preview.slice(0, 4000) + "\n…" : o.preview));
     list.append(card);
   }
@@ -632,6 +703,46 @@ const STAGES = {
       (m.creator || m.producer) ? el("p", { class: "summary", style: "margin:10px 0 0" }, `Currently: created with ${m.creator || "an unknown app"}, produced by ${m.producer || "an unknown library"}.`) : null,
       el("p", { class: "summary", style: "margin:6px 0 0" }, "Clearing a field removes it from the file.")),
       cta("Save changes", () => runJob("Updating", () => perFile("-edited", (doc) => { if (o.strip) doc.stripMetadata(); doc.setMetadata({ title: o.title, author: o.author, subject: o.subject, keywords: o.keywords }); }, { stripMetadata: false }))));
+  },
+  images() {
+    put(dropzone(), fileList({ reorder: true }));
+    const list = ready(); if (!files.length) return;
+    const o = pref("images", { size: "auto", margin: 0 });
+    if (files.length) put(el("p", { class: "summary" }, "Pages are added top to bottom. Drag to reorder."));
+    put(el("div", { class: "panel" }, el("h3", {}, "Page size"), el("div", { class: "row" }, field("Size", segmented([["auto", "Same as each image"], ["a4", "A4"], ["letter", "Letter"], ["legal", "Legal"]], o.size, (v) => { o.size = v; renderStage(); }, "Page size"), o.size === "auto" ? "Each page is exactly the image, at 150 dpi (a 1500 px wide photo makes a 10 inch wide page)." : "Images are fitted inside the page, turned to landscape when they are wider than tall."),
+      o.size === "auto" ? null : field("Margin", segmented([[0, "None"], [36, "½ inch"], [72, "1 inch"]], o.margin, (v) => (o.margin = v), "Margin")))),
+      cta(list.length > 1 ? `Make a PDF from ${plural(list.length, "image")}` : "Make PDF", () => runJob("Converting", async () => {
+        const doc = imagesToPdf(list.map((f) => f.png), o.size === "auto" ? { dpi: 150 } : { size: o.size, margin: o.margin });
+        try { return [{ name: (list.length === 1 ? stem(list[0].file.name) : "images") + ".pdf", data: doc.save({}), pages: doc.pageCount() }]; } finally { doc.free(); }
+      }), list.length > 0, files.some((f) => !f.doc && !f.err) ? "Still reading the images…" : null));
+  },
+  toimages() {
+    put(dropzone(), fileList());
+    const f = ready()[0]; if (!f) return;
+    const o = pref("toimages", { format: "png", dpi: 150, which: "all", custom: "" });
+    const pgs = el("div", { class: "row" }, field("Which pages", segmented([["all", "All pages"], ["custom", "Specific pages"]], o.which, (v) => { o.which = v; renderStage(); }, "Which pages")));
+    let grid = null;
+    if (o.which === "custom") { const rf = rangeField("Pages", o.custom, f.pages, (v) => (o.custom = v)); pgs.append(rf); grid = pageGrid(f, rf.querySelector("input"), null); }
+    put(el("div", { class: "panel" }, el("h3", {}, "Options"), el("div", { class: "row" }, field("Format", segmented([["png", "PNG (sharp, larger)"], ["jpeg", "JPEG (smaller)"]], o.format, (v) => (o.format = v), "Image format")), field("Resolution", segmented([[72, "72 dpi (screen)"], [150, "150 dpi"], [300, "300 dpi (print)"]], o.dpi, (v) => (o.dpi = v), "Resolution"))), pgs, grid,
+      el("p", { class: "summary", style: "margin:12px 0 0" }, "Several pages are delivered together as a ZIP file; a single page as one image.")),
+      cta("Convert to images", () => runJob("Rendering", async () => {
+        if (o.which === "custom" && !o.custom.trim()) throw new Error("Type which pages to convert, like 1, 3-5.");
+        const idx = o.which === "all" ? [...Array(f.pages).keys()] : Array.from(parsePageRanges(o.custom, f.pages));
+        const { openPdf } = await import("./thumbs.js?v=dev"); const pdf = await openPdf(f.bytes, f.pw); if (!pdf) throw new Error("This PDF couldn't be rendered.");
+        const items = []; let k = 0;
+        try {
+          for (const i of idx) {
+            setProgress(++k, idx.length, `page ${i + 1}`); await sleep(0);
+            const page = await pdf.getPage(i + 1); const vp = page.getViewport({ scale: o.dpi / 72 });
+            const cv = el("canvas", { width: Math.ceil(vp.width), height: Math.ceil(vp.height) });
+            await page.render({ canvasContext: cv.getContext("2d", { alpha: false }), viewport: vp, background: "#ffffff", annotationMode: 1 }).promise; page.cleanup();
+            const blob = await new Promise((r) => cv.toBlob(r, o.format === "png" ? "image/png" : "image/jpeg", 0.9));
+            items.push({ name: `${stem(f.file.name)}-page-${String(i + 1).padStart(String(f.pages).length, "0")}.${o.format === "png" ? "png" : "jpg"}`, data: new Uint8Array(await blob.arrayBuffer()) });
+          }
+        } finally { try { pdf.loadingTask?.destroy?.(); } catch {} }
+        if (items.length === 1) return [{ name: items[0].name, data: items[0].data, pages: 1, mime: o.format === "png" ? "image/png" : "image/jpeg", note: "1 image" }];
+        return [{ name: `${stem(f.file.name)}-pages.zip`, data: zip(items), pages: items.length, mime: "application/zip", note: `${plural(items.length, "image")} in a ZIP file` }];
+      })));
   },
   sign() { editorStage("sign", "fill", "-signed", "Sign & save"); },
   redact() { editorStage("redact", "redact", "-redacted", "Apply redactions"); },

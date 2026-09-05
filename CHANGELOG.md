@@ -29,6 +29,13 @@ All notable changes to this project are recorded here. The format follows
 - Web app: Redact (mark areas, find and mark every occurrence, report of
   what was removed) and Extract text tools; Compress gains image quality
   presets.
+- Web app is installable (web manifest, icons, service worker): works
+  fully offline once opened, registers as a `.pdf` file handler, shows the
+  build in the footer and offers a one-click update when a new deploy is
+  live.
+- `ops::images_to_pdf` / `add_image_page`, CLI `images`, wasm `imagesToPdf`
+  / `addImagePage`; web Images to PDF (any format the browser can decode)
+  and PDF to images (PNG/JPEG, ZIP for several pages) tools.
 - Lossy image recompression (`compress` module, batch step
   `compress-images`, CLI `compress --images`, wasm `compressImages`):
   downsample oversized grey/RGB images and re-encode as JPEG.

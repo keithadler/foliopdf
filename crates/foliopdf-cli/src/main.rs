@@ -26,6 +26,7 @@ USAGE
 COMMANDS
   info     <in.pdf>                       Show pages, encryption, metadata
   merge    <out.pdf> <in.pdf>...          Merge files in order
+  images   <out.pdf> <image>...           One page per JPEG/PNG [--size a4] [--margin 36] [--dpi 150]
   split    <in.pdf> --every N | --ranges \"1-3\" \"4-\"   [--out-dir D] [--name T]
   pages    <in.pdf> <out.pdf> --select \"1-3,7\" | --delete \"2,4\"
   rotate   <in.pdf> <out.pdf> --degrees 90 [--pages odd]
@@ -175,6 +176,7 @@ fn run(argv: &[String]) -> Result<(), String> {
     match cmd {
         "info" => info(&args),
         "merge" => merge(&args),
+        "images" => images_cmd(&args),
         "split" => split(&args),
         "pages" => pages(&args),
         "rotate" => rotate(&args),
@@ -336,6 +338,26 @@ fn merge(args: &Args) -> Result<(), String> {
     let refs: Vec<&Document> = docs.iter().collect();
     let mut merged = ops::merge(&refs).map_err(|e| e.to_string())?;
     write(&mut merged, out, &save_opts(args)?)
+}
+
+fn images_cmd(args: &Args) -> Result<(), String> {
+    let out = args.pos(1, "output file")?;
+    if args.positional.len() < 3 {
+        return Err("images needs at least one JPEG or PNG file".into());
+    }
+    let opts = foliopdf::ops::ImagePageOptions {
+        size: args.flag("size").map(str::to_owned),
+        margin: args.num("margin", 0.0)?,
+        dpi: args.num("dpi", 150.0)?,
+        ..Default::default()
+    };
+    let mut doc = Document::new();
+    for path in &args.positional[2..] {
+        let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
+        foliopdf::ops::add_image_page(&mut doc, &bytes, &opts)
+            .map_err(|e| format!("{path}: {e}"))?;
+    }
+    write(&mut doc, out, &save_opts(args)?)
 }
 
 fn split(args: &Args) -> Result<(), String> {

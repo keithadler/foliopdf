@@ -626,6 +626,85 @@ pub fn reverse_pages(doc: &mut Document) -> Result<()> {
     doc.select_pages(&order)
 }
 
+/// How images are placed on pages by [`images_to_pdf`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ImagePageOptions {
+    /// Named page size (`a4`, `letter`, ...). `None` sizes each page to its
+    /// image at `dpi`.
+    pub size: Option<String>,
+    /// Turn a fixed-size page to match the image's orientation. Default true.
+    pub auto_orient: bool,
+    /// Resolution used when the page is sized to the image. Default 150.
+    pub dpi: f64,
+    /// Margin in points on fixed-size pages. Default 0.
+    pub margin: f64,
+}
+
+impl Default for ImagePageOptions {
+    fn default() -> Self {
+        Self {
+            size: None,
+            auto_orient: true,
+            dpi: 150.0,
+            margin: 0.0,
+        }
+    }
+}
+
+/// Appends one page showing `image` (JPEG or PNG bytes).
+pub fn add_image_page(doc: &mut Document, image: &[u8], opts: &ImagePageOptions) -> Result<usize> {
+    let img = Image::load(image)?;
+    let (iw, ih) = (img.width.max(1) as f64, img.height.max(1) as f64);
+    let dpi = if opts.dpi.is_finite() && opts.dpi > 0.0 {
+        opts.dpi
+    } else {
+        150.0
+    };
+    let (page, rect) = match &opts.size {
+        None => {
+            // Keep the page a sensible size even for tiny images.
+            let (w, h) = ((iw / dpi * 72.0).max(3.0), (ih / dpi * 72.0).max(3.0));
+            (PageSize::new(w, h), Rect::new(0.0, 0.0, w, h))
+        }
+        Some(name) => {
+            let mut size = PageSize::by_name(name)
+                .ok_or_else(|| Error::Preset(format!("unknown page size '{name}'")))?;
+            if opts.auto_orient && (iw > ih) != (size.width > size.height) {
+                size = PageSize::new(size.height, size.width);
+            }
+            let m = opts.margin.max(0.0);
+            let (aw, ah) = (
+                (size.width - 2.0 * m).max(1.0),
+                (size.height - 2.0 * m).max(1.0),
+            );
+            let s = (aw / iw).min(ah / ih);
+            let (w, h) = (iw * s, ih * s);
+            (
+                size,
+                Rect::from_xywh(m + (aw - w) / 2.0, m + (ah - h) / 2.0, w, h),
+            )
+        }
+    };
+    let index = doc.page_count();
+    doc.add_page(page);
+    let img_ref = doc.add_image(&img, 6);
+    let name = doc.add_page_resource(index, "XObject", img_ref)?;
+    let mut cb = ContentBuilder::new();
+    cb.image(&name, &rect);
+    doc.draw(index, &cb.finish())?;
+    Ok(index)
+}
+
+/// Builds a document with one page per image (JPEG or PNG bytes).
+pub fn images_to_pdf(images: &[&[u8]], opts: &ImagePageOptions) -> Result<Document> {
+    let mut doc = Document::new();
+    for im in images {
+        add_image_page(&mut doc, im, opts)?;
+    }
+    Ok(doc)
+}
+
 /// Applies metadata.
 pub fn set_metadata(doc: &mut Document, m: &Metadata) {
     doc.set_metadata(m);
@@ -719,6 +798,50 @@ mod tests {
         assert!((doc.page_info(1).unwrap().media_box.width() - 595.28).abs() < 0.01);
         reverse_pages(&mut doc).unwrap();
         assert!((doc.page_info(2).unwrap().media_box.width() - 595.28).abs() < 0.01);
+    }
+
+    #[test]
+    fn image_pages() {
+        let png = crate::image::tests::tiny_png();
+        let doc = images_to_pdf(
+            &[&png, &png],
+            &ImagePageOptions {
+                dpi: 1.0,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(doc.page_count(), 2);
+        let info = doc.page_info(0).unwrap();
+        assert!(
+            (info.media_box.width() - 144.0).abs() < 1e-9,
+            "2 px at 1 dpi = 144 pt, got {}",
+            info.media_box.width()
+        );
+        let mut doc = Document::new();
+        add_image_page(
+            &mut doc,
+            &png,
+            &ImagePageOptions {
+                size: Some("a4".into()),
+                margin: 36.0,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let info = doc.page_info(0).unwrap();
+        assert!((info.media_box.width() - 595.28).abs() < 0.01);
+        let content = String::from_utf8(doc.page_content(0).unwrap()).unwrap();
+        assert!(content.contains("Do"), "{content}");
+        assert!(add_image_page(
+            &mut doc,
+            &png,
+            &ImagePageOptions {
+                size: Some("nope".into()),
+                ..Default::default()
+            }
+        )
+        .is_err());
     }
 
     #[test]

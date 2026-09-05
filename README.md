@@ -47,6 +47,18 @@ let out = doc.save(&SaveOptions {
 })?;
 ```
 
+### Install it as an app
+
+The web app is a Progressive Web App: open
+[keithadler.github.io/foliopdf](https://keithadler.github.io/foliopdf/),
+then use your browser's **Install app** button (Chrome, Edge, Brave: the
+icon in the address bar or the button in the app's header; Safari on iOS:
+Share → Add to Home Screen; Safari on macOS: File → Add to Dock). It then
+opens like any other app, works with no network at all, and can be set as
+the handler for `.pdf` files. Every deploy is versioned: an installed copy
+keeps working on the version it has, checks for a new build when opened,
+and offers a one-click update when one is available.
+
 ## Why another PDF library
 
 Most open-source PDF editing runs either in a browser (JavaScript, slow on

@@ -228,6 +228,14 @@ fonts, so characters outside WinAnsi (Cyrillic, CJK, …) are shown as `?`;
 see [limitations.md](limitations.md). Merging or extracting pages keeps
 their fields, renaming on clashes.
 
+## Images to PDF
+
+```rust
+use foliopdf::ops::{self, ImagePageOptions};
+let doc = ops::images_to_pdf(&[&jpeg_bytes, &png_bytes], &ImagePageOptions::default())?;   // pages sized to the images at 150 dpi
+ops::add_image_page(&mut doc, &png_bytes, &ImagePageOptions { size: Some("a4".into()), margin: 36.0, ..Default::default() })?;
+```
+
 ## Smaller images
 
 ```rust

@@ -11,7 +11,7 @@ use foliopdf::compress::{self, ImageOptions};
 use foliopdf::document::Metadata;
 use foliopdf::forms::{self, FieldValue, NewField};
 use foliopdf::geometry::{Point, Rect};
-use foliopdf::ops::{self, FitMode, ImageStamp, PageNumbers, TextStamp};
+use foliopdf::ops::{self, FitMode, ImagePageOptions, ImageStamp, PageNumbers, TextStamp};
 use foliopdf::redact::{self, RedactOptions};
 use foliopdf::text::{self, SearchOptions};
 use foliopdf::{Document, LoadOptions, PageSize, SaveOptions};
@@ -241,6 +241,18 @@ export interface ImageReport {
   bytesBefore: number; bytesAfter: number; skipped: string[];
 }
 
+/** Page layout for `imagesToPdf` / `addImagePage`. */
+export interface ImagePageOptions {
+  /** "a4", "letter", ... Omit to size each page to its image at `dpi`. */
+  size?: string | null;
+  /** Turn a fixed page to match the image orientation. Default true. */
+  autoOrient?: boolean;
+  /** Resolution for image-sized pages. Default 150. */
+  dpi?: number;
+  /** Margin in points on fixed pages. Default 0. */
+  margin?: number;
+}
+
 export interface BatchInput { name: string; data: Uint8Array; password?: string }
 export interface BatchAsset { name: string; data: Uint8Array }
 export interface BatchOutput { name: string; data: Uint8Array; pages: number; bytes: number; sources: string[] }
@@ -293,6 +305,8 @@ extern "C" {
     pub type ImageOptionsJs;
     #[wasm_bindgen(typescript_type = "ImageReport")]
     pub type ImageReportJs;
+    #[wasm_bindgen(typescript_type = "ImagePageOptions | undefined")]
+    pub type ImagePageOptionsJs;
     #[wasm_bindgen(typescript_type = "Metadata")]
     pub type MetadataJs;
     #[wasm_bindgen(typescript_type = "PageInfo[]")]
@@ -822,6 +836,17 @@ impl PdfDocument {
         Ok(to_js(&r)?.unchecked_into())
     }
 
+    /// Appends a page showing a JPEG or PNG. Returns the new page index.
+    #[wasm_bindgen(js_name = addImagePage)]
+    pub fn add_image_page(
+        &mut self,
+        image: &[u8],
+        options: ImagePageOptionsJs,
+    ) -> Result<usize, JsError> {
+        let o: ImagePageOptions = from_js(options.into())?;
+        ops::add_image_page(&mut self.inner, image, &o).map_err(err)
+    }
+
     fn display_height(&self, page: usize) -> Result<f64, JsError> {
         Ok(self.inner.page_info(page).map_err(err)?.display_height())
     }
@@ -855,6 +880,20 @@ impl Default for PdfDocument {
 /// Converts between y-up display space and y-down screen space.
 fn flip_rect(r: &Rect, h: f64) -> Rect {
     Rect::new(r.x0, h - r.y1, r.x1, h - r.y0)
+}
+
+/// Builds a document with one page per image (JPEG or PNG `Uint8Array`s).
+#[wasm_bindgen(js_name = imagesToPdf)]
+pub fn images_to_pdf(images: Array, options: ImagePageOptionsJs) -> Result<PdfDocument, JsError> {
+    let o: ImagePageOptions = from_js(options.into())?;
+    let list: Vec<Vec<u8>> = images
+        .iter()
+        .map(|v| Uint8Array::new(&v).to_vec())
+        .collect();
+    let refs: Vec<&[u8]> = list.iter().map(Vec::as_slice).collect();
+    Ok(PdfDocument {
+        inner: ops::images_to_pdf(&refs, &o).map_err(err)?,
+    })
 }
 
 /// Merges several PDFs (each a `Uint8Array`) into one document.

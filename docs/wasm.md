@@ -101,6 +101,14 @@ doc.removeField("email");
 The web app's Fill & Sign, Fill a form and Comment tools are built on
 exactly these calls (see `examples/web/editor.js`).
 
+## Images to PDF
+
+```ts
+import init, { imagesToPdf } from "foliopdf";
+const doc = imagesToPdf([jpegBytes, pngBytes], { size: "a4", margin: 36 });   // or {} for image-sized pages
+doc.addImagePage(moreBytes, {});
+```
+
 ## Smaller images
 
 ```ts

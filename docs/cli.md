@@ -23,6 +23,13 @@ Concatenate in order. Identical fonts and images shared across inputs are
 written once.
 
 ```
+folio images <out.pdf> photo1.jpg scan.png ... [--size a4] [--margin 36] [--dpi 150]
+```
+One page per JPEG or PNG. Without `--size` each page is the image's own
+size at `--dpi`; with a named size the image is fitted inside (turned to
+landscape when it is wider than tall).
+
+```
 folio split <in.pdf> --every N              [--out-dir D] [--name "{stem}-{index}.pdf"]
 folio split <in.pdf> --ranges "1-3" "4-9" "10-"
 ```
