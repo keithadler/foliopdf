@@ -5,8 +5,11 @@
 //! configurations. All byte arguments are `Uint8Array`s; all option objects
 //! are plain JSON (see the TypeScript definitions shipped in the package).
 
+use foliopdf::annot::{self, Annotation, AnnotationMeta, FlattenOptions};
 use foliopdf::batch::{self, Asset, Input, Preset, PresetStore as CoreStore};
 use foliopdf::document::Metadata;
+use foliopdf::forms::{self, FieldValue, NewField};
+use foliopdf::geometry::{Point, Rect};
 use foliopdf::ops::{self, FitMode, ImageStamp, PageNumbers, TextStamp};
 use foliopdf::{Document, LoadOptions, PageSize, SaveOptions};
 use js_sys::{Array, Object, Reflect, Uint8Array};
@@ -119,6 +122,85 @@ export interface Preset {
   output?: OutputOptions;
 }
 
+/**
+ * Geometry for annotations and form fields is in *screen* coordinates: points,
+ * measured from the top-left corner of the page as it is displayed (after
+ * rotation), x to the right and y downwards. Multiply by your zoom factor to
+ * get CSS pixels.
+ */
+export interface Point { x: number; y: number }
+
+export type Annotation =
+  | { kind: "highlight"; quads: Rect[]; color?: [number, number, number]; opacity?: number }
+  | { kind: "underline"; quads: Rect[]; color?: [number, number, number]; opacity?: number }
+  | { kind: "strike-out"; quads: Rect[]; color?: [number, number, number]; opacity?: number }
+  | { kind: "square"; rect: Rect; stroke?: [number, number, number] | null; fill?: [number, number, number] | null; width?: number; opacity?: number }
+  | { kind: "circle"; rect: Rect; stroke?: [number, number, number] | null; fill?: [number, number, number] | null; width?: number; opacity?: number }
+  | { kind: "line"; from: Point; to: Point; color?: [number, number, number]; width?: number; opacity?: number }
+  | { kind: "ink"; paths: Point[][]; color?: [number, number, number]; width?: number; opacity?: number }
+  | { kind: "free-text"; rect: Rect; text: string; font?: string; size?: number; color?: [number, number, number]; align?: "left" | "center" | "right"; background?: [number, number, number] | null; border?: [number, number, number] | null; opacity?: number }
+  | { kind: "note"; at: Point; icon?: "comment" | "note" | "key" | "help" | "paragraph" | "insert"; color?: [number, number, number] }
+  | { kind: "link"; rect: Rect; uri?: string; page?: number };
+
+export interface AnnotationMeta {
+  author?: string; contents?: string; subject?: string;
+  /** PDF date, e.g. "D:20260904120000Z". */
+  modified?: string;
+  /** Default true. */
+  print?: boolean;
+}
+
+export interface AnnotInfo {
+  index: number; object: number; subtype: string; rect: Rect;
+  contents: string | null; author: string | null; hidden: boolean;
+  /** For form widgets: the field name. */
+  field: string | null;
+  hasAppearance: boolean;
+}
+
+export interface FlattenOptions {
+  /** Include form field widgets. Default true. */
+  widgets?: boolean;
+  /** Only these object numbers (from AnnotInfo.object / addAnnotation). */
+  objects?: number[];
+  /** Only these subtypes, e.g. ["Highlight", "Ink"]. */
+  subtypes?: string[];
+}
+
+export type FieldKind = "text" | "checkbox" | "radio" | "combo" | "list" | "button" | "signature" | "unknown";
+export interface FieldOption { value: string; label: string }
+export interface Widget { page: number | null; rect: Rect; onState: string | null; object: number }
+export interface Field {
+  name: string; kind: FieldKind; value: string | null; values: string[]; options: FieldOption[];
+  page: number | null; rect: Rect | null; widgets: Widget[];
+  readOnly: boolean; required: boolean; multiline: boolean; password: boolean; maxLen: number | null; object: number;
+}
+/** A string (text, export value, radio choice), a boolean (check box) or a string[] (multi-select list). */
+export type FieldValue = string | boolean | string[];
+
+/** A field to create with `addField` (screen coordinates). */
+export interface NewField {
+  name: string;
+  /** Default "text". */
+  kind?: "text" | "checkbox" | "radio" | "combo" | "list";
+  rect: Rect;
+  value?: string;
+  /** Choices for radio groups, drop-downs and lists. */
+  options?: string[];
+  /** One rectangle per radio button; otherwise buttons are laid out inside `rect`. */
+  widgets?: Rect[];
+  multiline?: boolean; required?: boolean; readOnly?: boolean; password?: boolean;
+  maxLen?: number; comb?: boolean;
+  /** 0 (default) fits the text to the box. */
+  fontSize?: number;
+  color?: [number, number, number];
+  align?: "left" | "center" | "right";
+  background?: [number, number, number] | null;
+  border?: [number, number, number] | null;
+  borderWidth?: number;
+  tooltip?: string;
+}
+
 export interface BatchInput { name: string; data: Uint8Array; password?: string }
 export interface BatchAsset { name: string; data: Uint8Array }
 export interface BatchOutput { name: string; data: Uint8Array; pages: number; bytes: number; sources: string[] }
@@ -137,6 +219,24 @@ extern "C" {
     pub type PageNumbersJs;
     #[wasm_bindgen(typescript_type = "ResizeOptions")]
     pub type ResizeJs;
+    #[wasm_bindgen(typescript_type = "Annotation")]
+    pub type AnnotationJs;
+    #[wasm_bindgen(typescript_type = "AnnotationMeta | undefined")]
+    pub type AnnotationMetaJs;
+    #[wasm_bindgen(typescript_type = "AnnotInfo[]")]
+    pub type AnnotInfoArrayJs;
+    #[wasm_bindgen(typescript_type = "FlattenOptions | undefined")]
+    pub type FlattenOptionsJs;
+    #[wasm_bindgen(typescript_type = "Rect")]
+    pub type RectJs;
+    #[wasm_bindgen(typescript_type = "Field[]")]
+    pub type FieldArrayJs;
+    #[wasm_bindgen(typescript_type = "FieldValue")]
+    pub type FieldValueJs;
+    #[wasm_bindgen(typescript_type = "Record<string, FieldValue>")]
+    pub type FieldValuesJs;
+    #[wasm_bindgen(typescript_type = "NewField")]
+    pub type NewFieldJs;
     #[wasm_bindgen(typescript_type = "Metadata")]
     pub type MetadataJs;
     #[wasm_bindgen(typescript_type = "PageInfo[]")]
@@ -422,6 +522,169 @@ impl PdfDocument {
         self.inner.has_owner_access()
     }
 
+    // -- annotations ------------------------------------------------------------
+
+    /// Lists the annotations on a page (screen coordinates).
+    pub fn annotations(&self, page: usize) -> Result<AnnotInfoArrayJs, JsError> {
+        let h = self.display_height(page)?;
+        let mut list = annot::list_annotations(&self.inner, page).map_err(err)?;
+        for a in &mut list {
+            a.rect = flip_rect(&a.rect, h);
+        }
+        Ok(to_js(&list)?.unchecked_into())
+    }
+
+    /// Adds an annotation (see the `Annotation` type; screen coordinates).
+    /// Returns its object number, usable with `flattenAnnotations`.
+    #[wasm_bindgen(js_name = addAnnotation)]
+    pub fn add_annotation(
+        &mut self,
+        page: usize,
+        annotation: AnnotationJs,
+        meta: AnnotationMetaJs,
+    ) -> Result<u32, JsError> {
+        let mut a: Annotation = serde_wasm_bindgen::from_value(annotation.into())
+            .map_err(|e| JsError::new(&format!("invalid annotation: {e}")))?;
+        let m: AnnotationMeta = from_js(meta.into())?;
+        let h = self.display_height(page)?;
+        a.map_points(|p| Point::new(p.x, h - p.y));
+        Ok(annot::add_annotation(&mut self.inner, page, &a, &m)
+            .map_err(err)?
+            .num)
+    }
+
+    /// Places a JPEG or PNG (a signature, a logo) filling `rect` on a page
+    /// as a stamp annotation. Returns its object number.
+    #[wasm_bindgen(js_name = addImageAnnotation)]
+    pub fn add_image_annotation(
+        &mut self,
+        page: usize,
+        rect: RectJs,
+        image: &[u8],
+        opacity: Option<f64>,
+        meta: AnnotationMetaJs,
+    ) -> Result<u32, JsError> {
+        let r: Rect = serde_wasm_bindgen::from_value(rect.into())
+            .map_err(|e| JsError::new(&format!("invalid rect: {e}")))?;
+        let m: AnnotationMeta = from_js(meta.into())?;
+        let h = self.display_height(page)?;
+        Ok(annot::add_image_annotation(
+            &mut self.inner,
+            page,
+            flip_rect(&r, h),
+            image,
+            opacity.unwrap_or(1.0),
+            &m,
+        )
+        .map_err(err)?
+        .num)
+    }
+
+    /// Removes the annotation at `index` of a page's list.
+    #[wasm_bindgen(js_name = removeAnnotation)]
+    pub fn remove_annotation(&mut self, page: usize, index: usize) -> Result<(), JsError> {
+        annot::remove_annotation(&mut self.inner, page, index).map_err(err)
+    }
+
+    /// Removes annotations matching `options` on `pages` (null = all).
+    /// Returns how many were removed.
+    #[wasm_bindgen(js_name = removeAnnotations)]
+    pub fn remove_annotations(
+        &mut self,
+        pages: Option<String>,
+        options: FlattenOptionsJs,
+    ) -> Result<usize, JsError> {
+        let o: FlattenOptions = from_js(options.into())?;
+        let idx = self.range(pages)?;
+        annot::remove_annotations(&mut self.inner, &idx, &o).map_err(err)
+    }
+
+    /// Paints annotations into the page content and removes them, so they
+    /// become a permanent part of the page. Returns how many were flattened.
+    #[wasm_bindgen(js_name = flattenAnnotations)]
+    pub fn flatten_annotations(
+        &mut self,
+        pages: Option<String>,
+        options: FlattenOptionsJs,
+    ) -> Result<usize, JsError> {
+        let o: FlattenOptions = from_js(options.into())?;
+        let idx = self.range(pages)?;
+        annot::flatten_annotations(&mut self.inner, &idx, &o).map_err(err)
+    }
+
+    // -- forms ------------------------------------------------------------------
+
+    /// Lists the form fields (screen coordinates).
+    pub fn fields(&self) -> Result<FieldArrayJs, JsError> {
+        let mut list = forms::list_fields(&self.inner);
+        for f in &mut list {
+            for w in &mut f.widgets {
+                if let Some(p) = w.page {
+                    let h = self.display_height(p)?;
+                    w.rect = flip_rect(&w.rect, h);
+                }
+            }
+            f.rect = f.widgets.first().map(|w| w.rect);
+        }
+        Ok(to_js(&list)?.unchecked_into())
+    }
+
+    /// Whether the document has form fields.
+    #[wasm_bindgen(js_name = hasFields)]
+    pub fn has_fields(&self) -> bool {
+        forms::has_fields(&self.inner)
+    }
+
+    /// Sets a field's value and regenerates its appearance. Accepts a
+    /// string, a boolean (check boxes) or a string array (multi-select lists).
+    #[wasm_bindgen(js_name = setField)]
+    pub fn set_field(&mut self, name: &str, value: FieldValueJs) -> Result<(), JsError> {
+        let v: FieldValue = serde_wasm_bindgen::from_value(value.into())
+            .map_err(|e| JsError::new(&format!("invalid value: {e}")))?;
+        forms::set_field(&mut self.inner, name, &v).map_err(err)
+    }
+
+    /// Sets several fields from a `{ name: value }` object. Returns the
+    /// names that do not exist.
+    #[wasm_bindgen(js_name = setFields)]
+    pub fn set_fields(&mut self, values: FieldValuesJs) -> Result<Vec<String>, JsError> {
+        let map: std::collections::BTreeMap<String, FieldValue> =
+            serde_wasm_bindgen::from_value(values.into())
+                .map_err(|e| JsError::new(&format!("invalid values: {e}")))?;
+        let list: Vec<(String, FieldValue)> = map.into_iter().collect();
+        forms::set_fields(&mut self.inner, &list).map_err(err)
+    }
+
+    /// Paints every field into its page and removes the form. Returns how
+    /// many widgets were flattened.
+    #[wasm_bindgen(js_name = flattenFields)]
+    pub fn flatten_fields(&mut self) -> Result<usize, JsError> {
+        forms::flatten_fields(&mut self.inner).map_err(err)
+    }
+
+    /// Creates a form field on a page. Returns the field's object number.
+    #[wasm_bindgen(js_name = addField)]
+    pub fn add_field(&mut self, page: usize, field: NewFieldJs) -> Result<u32, JsError> {
+        let mut f: NewField = serde_wasm_bindgen::from_value(field.into())
+            .map_err(|e| JsError::new(&format!("invalid field: {e}")))?;
+        let h = self.display_height(page)?;
+        f.rect = flip_rect(&f.rect, h);
+        f.widgets = f.widgets.iter().map(|r| flip_rect(r, h)).collect();
+        Ok(forms::add_field(&mut self.inner, page, &f)
+            .map_err(err)?
+            .num)
+    }
+
+    /// Removes a field and its widgets. Returns whether it existed.
+    #[wasm_bindgen(js_name = removeField)]
+    pub fn remove_field(&mut self, name: &str) -> Result<bool, JsError> {
+        forms::remove_field(&mut self.inner, name).map_err(err)
+    }
+
+    fn display_height(&self, page: usize) -> Result<f64, JsError> {
+        Ok(self.inner.page_info(page).map_err(err)?.display_height())
+    }
+
     /// Decoded content stream of a page (for debugging).
     #[wasm_bindgen(js_name = pageContent)]
     pub fn page_content(&self, index: usize) -> Result<String, JsError> {
@@ -446,6 +709,11 @@ impl Default for PdfDocument {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Converts between y-up display space and y-down screen space.
+fn flip_rect(r: &Rect, h: f64) -> Rect {
+    Rect::new(r.x0, h - r.y1, r.x1, h - r.y0)
 }
 
 /// Merges several PDFs (each a `Uint8Array`) into one document.

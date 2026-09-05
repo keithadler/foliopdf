@@ -431,7 +431,7 @@ fn unpack_indices(pixels: &[u8], width: usize, height: usize, depth: u8) -> Vec<
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     fn png_chunk(kind: &[u8], data: &[u8]) -> Vec<u8> {
@@ -443,7 +443,7 @@ mod tests {
     }
 
     /// Builds a minimal 2×2 RGBA PNG (filter type 0 rows).
-    fn tiny_png() -> Vec<u8> {
+    pub(crate) fn tiny_png() -> Vec<u8> {
         let mut ihdr = Vec::new();
         ihdr.extend_from_slice(&2u32.to_be_bytes());
         ihdr.extend_from_slice(&2u32.to_be_bytes());

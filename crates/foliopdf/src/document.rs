@@ -854,7 +854,9 @@ impl Document {
     ///
     /// Everything the pages reference (fonts, images, annotations) comes
     /// along; references to pages that were not selected become `null`.
-    /// Outlines and interactive form field trees are not copied.
+    /// Form fields whose widgets sit on the imported pages are registered
+    /// with this document's form (renamed on clashes). Outlines are not
+    /// copied.
     pub fn import_pages(
         &mut self,
         src: &Document,
@@ -894,7 +896,29 @@ impl Document {
             };
             new_pages.push(np);
         }
-        // Copy inherited attributes down onto the page copies.
+        self.copy_pending(src, &src_pages, root, &mut map, &skip, &mut work);
+        self.import_form(src, &new_pages, &mut map, &skip, &mut work);
+        self.copy_pending(src, &src_pages, root, &mut map, &skip, &mut work);
+        let mut kids = self.page_refs();
+        let at = at.unwrap_or(kids.len()).min(kids.len());
+        for (k, &p) in new_pages.iter().enumerate() {
+            kids.insert(at + k, p);
+        }
+        self.set_kids(root, kids);
+        Ok(new_pages)
+    }
+
+    /// Copies every object queued in `work`, remapping references as it goes.
+    /// Inherited page attributes are copied down onto page copies.
+    fn copy_pending(
+        &mut self,
+        src: &Document,
+        src_pages: &[ObjRef],
+        root: ObjRef,
+        map: &mut HashMap<u32, ObjRef>,
+        skip: &HashSet<u32>,
+        work: &mut VecDeque<(ObjRef, ObjRef)>,
+    ) {
         while let Some((sref, dref)) = work.pop_front() {
             let mut obj = src.get(sref).clone();
             let is_page = src_pages.iter().any(|p| p.num == sref.num);
@@ -913,7 +937,7 @@ impl Document {
                     d.set("Type", "Page");
                 }
             }
-            self.remap_refs(&mut obj, src, &mut map, &skip, &mut work);
+            self.remap_refs(&mut obj, src, map, skip, work);
             if is_page {
                 if let Some(d) = obj.as_dict_mut() {
                     d.set("Parent", root);
@@ -921,13 +945,131 @@ impl Document {
             }
             self.set(dref, obj);
         }
-        let mut kids = self.page_refs();
-        let at = at.unwrap_or(kids.len()).min(kids.len());
-        for (k, &p) in new_pages.iter().enumerate() {
-            kids.insert(at + k, p);
+    }
+
+    /// After pages were copied: registers the form fields of any imported
+    /// widgets with this document's `/AcroForm`, pruning widgets that sit on
+    /// pages that were not imported, and merging default resources.
+    fn import_form(
+        &mut self,
+        src: &Document,
+        new_pages: &[ObjRef],
+        map: &mut HashMap<u32, ObjRef>,
+        skip: &HashSet<u32>,
+        work: &mut VecDeque<(ObjRef, ObjRef)>,
+    ) {
+        let src_af = match src
+            .dict_get(src.catalog(), "AcroForm")
+            .and_then(Object::as_dict)
+        {
+            Some(a) => a.clone(),
+            None => return,
+        };
+        let mut widgets: HashSet<u32> = HashSet::new();
+        let mut roots: Vec<ObjRef> = Vec::new();
+        let mut seen: HashSet<u32> = HashSet::new();
+        for &p in new_pages {
+            let annots: Vec<ObjRef> = match self
+                .get(p)
+                .as_dict()
+                .and_then(|d| d.get("Annots"))
+                .map(|o| self.resolve(o))
+            {
+                Some(Object::Array(a)) => a.iter().filter_map(Object::as_reference).collect(),
+                _ => Vec::new(),
+            };
+            for a in annots {
+                let is_widget = self
+                    .get(a)
+                    .as_dict()
+                    .map(|d| crate::forms::dict_is_widget(self, d))
+                    .unwrap_or(false);
+                if !is_widget {
+                    continue;
+                }
+                widgets.insert(a.num);
+                let mut top = a;
+                let mut guard = 0;
+                while let Some(parent) = self
+                    .get(top)
+                    .as_dict()
+                    .and_then(|d| d.get("Parent"))
+                    .and_then(Object::as_reference)
+                {
+                    guard += 1;
+                    if guard > 64 || self.get(parent).is_null() {
+                        break;
+                    }
+                    top = parent;
+                }
+                if seen.insert(top.num) {
+                    roots.push(top);
+                }
+            }
         }
-        self.set_kids(root, kids);
-        Ok(new_pages)
+        if roots.is_empty() {
+            return;
+        }
+        // Keep the source's field order where possible.
+        let src_order: Vec<u32> = match src_af.get("Fields").map(|o| src.resolve(o)) {
+            Some(Object::Array(a)) => a
+                .iter()
+                .filter_map(Object::as_reference)
+                .filter_map(|r| map.get(&r.num))
+                .map(|r| r.num)
+                .collect(),
+            _ => Vec::new(),
+        };
+        roots.sort_by_key(|r| {
+            src_order
+                .iter()
+                .position(|n| *n == r.num)
+                .unwrap_or(usize::MAX)
+        });
+        roots.retain(|&r| self.prune_imported(r, &widgets));
+        let mut dr = src_af
+            .get("DR")
+            .map(|o| src.resolve(o).clone())
+            .unwrap_or(Object::Null);
+        self.remap_refs(&mut dr, src, map, skip, work);
+        let mut da = src_af.get("DA").map(|o| src.resolve(o).clone());
+        if let Some(d) = da.as_mut() {
+            self.remap_refs(d, src, map, skip, work);
+        }
+        let need = src_af
+            .get("NeedAppearances")
+            .and_then(Object::as_bool)
+            .unwrap_or(false);
+        crate::forms::attach_roots(self, &roots, dr.into_dict(), da, need);
+    }
+
+    /// Keeps only the widgets in `keep` under `r`. Returns whether `r` survives.
+    fn prune_imported(&mut self, r: ObjRef, keep: &HashSet<u32>) -> bool {
+        let (is_widget, kids): (bool, Vec<ObjRef>) = match self.get(r).as_dict() {
+            Some(d) => (
+                crate::forms::dict_is_widget(self, d),
+                match d.get("Kids").map(|o| self.resolve(o)) {
+                    Some(Object::Array(a)) => a.iter().filter_map(Object::as_reference).collect(),
+                    _ => Vec::new(),
+                },
+            ),
+            None => return false,
+        };
+        if kids.is_empty() {
+            return is_widget && keep.contains(&r.num);
+        }
+        let survivors: Vec<Object> = kids
+            .into_iter()
+            .filter(|k| self.prune_imported(*k, keep))
+            .map(Object::Reference)
+            .collect();
+        if survivors.is_empty() {
+            return false;
+        }
+        if let Some(d) = self.get_mut(r).and_then(Object::as_dict_mut) {
+            d.set("Kids", Object::Array(survivors));
+        }
+        true
     }
 
     fn remap_refs(

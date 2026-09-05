@@ -31,6 +31,8 @@
 //!
 //! * [`Document`] – load, inspect, edit and save a file.
 //! * [`ops`] – higher-level operations: merge, split, page ranges, stamps.
+//! * [`annot`] – highlights, drawings, notes, links, image stamps; flattening.
+//! * [`forms`] – list, fill and flatten interactive form fields.
 //! * [`batch`] – run a JSON-described pipeline over many files; store and
 //!   reuse export presets.
 //! * [`object`] – the low-level object model when you need full control.
@@ -49,6 +51,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod annot;
 pub mod batch;
 pub mod content;
 pub mod crypto;
@@ -56,6 +59,7 @@ pub mod document;
 pub mod error;
 pub mod filters;
 pub mod font;
+pub mod forms;
 pub mod geometry;
 pub mod image;
 pub mod lexer;

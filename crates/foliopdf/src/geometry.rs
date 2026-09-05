@@ -90,6 +90,71 @@ impl Rect {
     pub fn center(&self) -> Point {
         Point::new((self.x0 + self.x1) / 2.0, (self.y0 + self.y1) / 2.0)
     }
+    /// Smallest rectangle containing both.
+    pub fn union(&self, other: &Rect) -> Rect {
+        Rect {
+            x0: self.x0.min(other.x0),
+            y0: self.y0.min(other.y0),
+            x1: self.x1.max(other.x1),
+            y1: self.y1.max(other.y1),
+        }
+    }
+    /// The overlap, or `None` when the rectangles do not touch.
+    pub fn intersection(&self, other: &Rect) -> Option<Rect> {
+        let r = Rect {
+            x0: self.x0.max(other.x0),
+            y0: self.y0.max(other.y0),
+            x1: self.x1.min(other.x1),
+            y1: self.y1.min(other.y1),
+        };
+        (r.x1 > r.x0 && r.y1 > r.y0).then_some(r)
+    }
+    /// Whether the rectangles overlap (touching edges do not count).
+    pub fn intersects(&self, other: &Rect) -> bool {
+        self.intersection(other).is_some()
+    }
+    /// Whether `other` lies entirely inside `self`.
+    pub fn contains(&self, other: &Rect) -> bool {
+        other.x0 >= self.x0 && other.y0 >= self.y0 && other.x1 <= self.x1 && other.y1 <= self.y1
+    }
+    /// Whether the point lies inside (edges included).
+    pub fn contains_point(&self, p: Point) -> bool {
+        p.x >= self.x0 && p.x <= self.x1 && p.y >= self.y0 && p.y <= self.y1
+    }
+    /// Grows every side by `d` (shrinks when negative).
+    pub fn expand(&self, d: f64) -> Rect {
+        Rect::new(self.x0 - d, self.y0 - d, self.x1 + d, self.y1 + d)
+    }
+    /// Bounding box of the rectangle after transforming its corners.
+    pub fn transform(&self, m: &Matrix) -> Rect {
+        let ps = [
+            m.apply(Point::new(self.x0, self.y0)),
+            m.apply(Point::new(self.x1, self.y0)),
+            m.apply(Point::new(self.x0, self.y1)),
+            m.apply(Point::new(self.x1, self.y1)),
+        ];
+        let mut r = Rect::new(ps[0].x, ps[0].y, ps[0].x, ps[0].y);
+        for p in &ps[1..] {
+            r.x0 = r.x0.min(p.x);
+            r.y0 = r.y0.min(p.y);
+            r.x1 = r.x1.max(p.x);
+            r.y1 = r.y1.max(p.y);
+        }
+        r
+    }
+    /// Bounding box of a set of points, or `None` when empty.
+    pub fn bounds(points: impl IntoIterator<Item = Point>) -> Option<Rect> {
+        let mut it = points.into_iter();
+        let first = it.next()?;
+        let mut r = Rect::new(first.x, first.y, first.x, first.y);
+        for p in it {
+            r.x0 = r.x0.min(p.x);
+            r.y0 = r.y0.min(p.y);
+            r.x1 = r.x1.max(p.x);
+            r.y1 = r.y1.max(p.y);
+        }
+        Some(r)
+    }
 }
 
 /// A 2-D affine matrix `[a b c d e f]` as used by the `cm` and `Tm` operators.
@@ -156,6 +221,26 @@ impl Matrix {
             f: self.e * other.b + self.f * other.d + other.f,
         }
     }
+    /// The inverse, or `None` when the matrix is singular.
+    pub fn invert(&self) -> Option<Matrix> {
+        let det = self.a * self.d - self.b * self.c;
+        if det.abs() < 1e-12 || !det.is_finite() {
+            return None;
+        }
+        let (a, b, c, d) = (self.d / det, -self.b / det, -self.c / det, self.a / det);
+        Some(Matrix {
+            a,
+            b,
+            c,
+            d,
+            e: -(self.e * a + self.f * c),
+            f: -(self.e * b + self.f * d),
+        })
+    }
+    /// The rotation/scale part with the translation removed.
+    pub fn linear(&self) -> Matrix {
+        Matrix::new(self.a, self.b, self.c, self.d, 0.0, 0.0)
+    }
     /// Transforms a point.
     pub fn apply(&self, p: Point) -> Point {
         Point::new(
@@ -202,5 +287,21 @@ mod tests {
         assert_eq!(p, Point::new(7.0, 7.0));
         let r = Matrix::rotate_deg(90.0).apply(Point::new(1.0, 0.0));
         assert!((r.x).abs() < 1e-9 && (r.y - 1.0).abs() < 1e-9);
+        let inv = m.invert().unwrap();
+        let back = inv.apply(p);
+        assert!((back.x - 1.0).abs() < 1e-9 && (back.y - 1.0).abs() < 1e-9);
+        assert!(Matrix::new(1.0, 2.0, 2.0, 4.0, 0.0, 0.0).invert().is_none());
+    }
+
+    #[test]
+    fn rect_ops() {
+        let a = Rect::new(0.0, 0.0, 10.0, 10.0);
+        let b = Rect::new(5.0, 5.0, 20.0, 20.0);
+        assert_eq!(a.union(&b), Rect::new(0.0, 0.0, 20.0, 20.0));
+        assert_eq!(a.intersection(&b), Some(Rect::new(5.0, 5.0, 10.0, 10.0)));
+        assert!(!a.intersects(&Rect::new(10.0, 0.0, 20.0, 10.0)));
+        assert!(a.contains(&Rect::new(1.0, 1.0, 2.0, 2.0)));
+        let t = a.transform(&Matrix::rotate_deg(90.0));
+        assert!((t.x0 + 10.0).abs() < 1e-9 && (t.x1).abs() < 1e-9);
     }
 }
