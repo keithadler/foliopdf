@@ -76,7 +76,7 @@ and the result has one clean cross-reference section.
 | Redaction | true removal of text, vector graphics and image pixels (raw, Flate and JPEG) under an area or a search term, including inside form XObjects; overlapping annotations removed; boxes painted over |
 | Stamps | text watermarks and image logos (JPEG/PNG with alpha) with opacity, rotation and nine anchor positions; page numbers; stamps stay upright on rotated pages |
 | Fonts | standard 14 with real metrics; embedded TrueType/OpenType with glyph subsetting and ToUnicode |
-| Compression | stream recompression, object streams, cross-reference streams, dedup of identical fonts and images, metadata stripping |
+| Compression | stream recompression, object streams, cross-reference streams, dedup of identical fonts and images, metadata stripping; optional lossy image downsampling and JPEG re-encoding for scans and photos |
 | Batch | JSON presets: merge-or-each modes, ordered steps, output naming templates, encryption; `PresetStore` for saving export configurations |
 
 Not in scope (yet): rendering pages to pixels, cryptographic digital

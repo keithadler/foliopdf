@@ -36,9 +36,9 @@ when you need one of these.
 - **Incremental updates.** Every save is a full rewrite. This is deliberate.
 - **Public-key encryption** (`/Filter /Adobe.PubSec`). Only the standard
   password security handler is supported.
-- **Image transcoding.** JPEG data is embedded as is; PNG is decoded and
-  stored as Flate. There is no downsampling or re-encoding of existing
-  images, so scanned PDFs do not shrink beyond what Flate offers.
+- **Image transcoding** covers 8-bit grey and RGB images (raw, Flate,
+  JPEG). CMYK, indexed, 1-bit, 16-bit, JPEG 2000, fax and JBIG2 images are
+  kept as they are.
 - **Interlaced (Adam7) PNG** input is rejected; re-save the image.
 - **Type 1 / CFF font subsetting.** CFF-flavoured OpenType fonts are embedded
   whole. TrueType outlines are subset.

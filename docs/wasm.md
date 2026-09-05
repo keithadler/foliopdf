@@ -101,6 +101,12 @@ doc.removeField("email");
 The web app's Fill & Sign, Fill a form and Comment tools are built on
 exactly these calls (see `examples/web/editor.js`).
 
+## Smaller images
+
+```ts
+const r = doc.compressImages({ maxDpi: 150, quality: 75 });   // lossy; then doc.save({ compress: true })
+```
+
 ## Text and redaction
 
 ```ts

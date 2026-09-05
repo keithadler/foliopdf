@@ -7,6 +7,7 @@
 
 use foliopdf::annot::{self, Annotation, AnnotationMeta, FlattenOptions};
 use foliopdf::batch::{self, Asset, Input, Preset, PresetStore as CoreStore};
+use foliopdf::compress::{self, ImageOptions};
 use foliopdf::document::Metadata;
 use foliopdf::forms::{self, FieldValue, NewField};
 use foliopdf::geometry::{Point, Rect};
@@ -224,6 +225,22 @@ export interface RedactReport {
   matches?: number;
 }
 
+/** Lossy image recompression settings. */
+export interface ImageOptions {
+  /** Images shown at more than this resolution are downsampled to it. Default 150. */
+  maxDpi?: number;
+  /** JPEG quality 1–100. Default 75. */
+  quality?: number;
+  /** Re-encode lossless (Flate) photos as JPEG too. Default true. */
+  convertLossless?: boolean;
+  /** Skip images with fewer pixels. Default 4096. */
+  minPixels?: number;
+}
+export interface ImageReport {
+  images: number; recompressed: number; downsampled: number;
+  bytesBefore: number; bytesAfter: number; skipped: string[];
+}
+
 export interface BatchInput { name: string; data: Uint8Array; password?: string }
 export interface BatchAsset { name: string; data: Uint8Array }
 export interface BatchOutput { name: string; data: Uint8Array; pages: number; bytes: number; sources: string[] }
@@ -272,6 +289,10 @@ extern "C" {
     pub type RedactOptionsJs;
     #[wasm_bindgen(typescript_type = "RedactReport")]
     pub type RedactReportJs;
+    #[wasm_bindgen(typescript_type = "ImageOptions | undefined")]
+    pub type ImageOptionsJs;
+    #[wasm_bindgen(typescript_type = "ImageReport")]
+    pub type ImageReportJs;
     #[wasm_bindgen(typescript_type = "Metadata")]
     pub type MetadataJs;
     #[wasm_bindgen(typescript_type = "PageInfo[]")]
@@ -790,6 +811,15 @@ impl PdfDocument {
         let v = to_js(&report)?;
         Reflect::set(&v, &"matches".into(), &(matches as u32).into()).ok();
         Ok(v.unchecked_into())
+    }
+
+    /// Downsamples oversized images and re-encodes them as JPEG (lossy).
+    /// Combine with `save({ compress: true })` for the smallest files.
+    #[wasm_bindgen(js_name = compressImages)]
+    pub fn compress_images(&mut self, options: ImageOptionsJs) -> Result<ImageReportJs, JsError> {
+        let o: ImageOptions = from_js(options.into())?;
+        let r = compress::compress_images(&mut self.inner, &o).map_err(err)?;
+        Ok(to_js(&r)?.unchecked_into())
     }
 
     fn display_height(&self, page: usize) -> Result<f64, JsError> {

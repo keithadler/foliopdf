@@ -24,6 +24,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::compress::ImageOptions;
 use crate::crypto::EncryptionOptions;
 use crate::document::{Document, LoadOptions, Metadata, SaveOptions};
 use crate::error::{Error, Result};
@@ -145,6 +146,12 @@ pub enum Step {
         /// point (or Letter in an empty document).
         #[serde(default)]
         size: Option<String>,
+    },
+    /// Downsample and re-encode images as JPEG (lossy) for much smaller files.
+    CompressImages {
+        /// Settings; omitted fields use the defaults (150 dpi, quality 75).
+        #[serde(flatten)]
+        options: ImageOptions,
     },
     /// Split into several documents. Must be the last step.
     Split {
@@ -298,6 +305,14 @@ impl Preset {
                 } => {
                     resolve_size(size.as_deref(), *width, *height)
                         .map_err(|e| Error::Preset(format!("step {}: {e}", i + 1)))?;
+                }
+                Step::CompressImages { options }
+                    if !(1..=100).contains(&options.quality) || !(options.max_dpi > 0.0) =>
+                {
+                    return Err(Error::Preset(format!(
+                        "step {}: quality must be 1–100 and maxDpi positive",
+                        i + 1
+                    )));
                 }
                 Step::Scale { factor, .. } if !(*factor > 0.0 && factor.is_finite()) => {
                     return Err(Error::Preset(format!(
@@ -608,6 +623,9 @@ fn process(
                 ops::scale_pages(&mut doc, &idx, *factor)?;
             }
             Step::Reverse => ops::reverse_pages(&mut doc)?,
+            Step::CompressImages { options } => {
+                crate::compress::compress_images(&mut doc, options)?;
+            }
             Step::BlankPages { at, count, size } => {
                 let n = doc.page_count();
                 let at = match at {

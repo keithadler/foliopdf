@@ -56,10 +56,13 @@ folio blank <in.pdf> <out.pdf> [--at N] [--count 1] [--size a4]
 
 ```
 folio compress <in.pdf> <out.pdf> [--level 9] [--strip-metadata]
+folio compress <in.pdf> <out.pdf> --images [--dpi 150] [--quality 75] [--keep-lossless]
 ```
 Recompresses streams, packs objects, drops unreferenced and duplicate
-objects. Already-optimised files may not shrink; scanned images are never
-re-encoded (that would be lossy).
+objects. Already-optimised files may not shrink. With `--images`, grey and
+RGB images displayed above `--dpi` are downsampled to it and re-encoded as
+JPEG at `--quality`, which is what makes scans and photo-heavy files
+small (lossy). `--keep-lossless` leaves Flate images alone.
 
 ```
 folio encrypt <in.pdf> <out.pdf> [--user PW] [--owner PW] [--method aes256|aes128|rc4]

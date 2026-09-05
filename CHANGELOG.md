@@ -27,7 +27,11 @@ All notable changes to this project are recorded here. The format follows
   form XObjects and invisible OCR text; removes overlapping annotations;
   paints the areas. CLI `redact`; wasm `redact`, `redactText`.
 - Web app: Redact (mark areas, find and mark every occurrence, report of
-  what was removed) and Extract text tools.
+  what was removed) and Extract text tools; Compress gains image quality
+  presets.
+- Lossy image recompression (`compress` module, batch step
+  `compress-images`, CLI `compress --images`, wasm `compressImages`):
+  downsample oversized grey/RGB images and re-encode as JPEG.
 - Interactive forms (`forms` module): list fields, fill text / check box /
   radio / drop-down / list fields with generated appearances, create and
   remove fields, flatten. Merging and extracting pages now carries form

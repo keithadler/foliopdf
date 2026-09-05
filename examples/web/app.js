@@ -428,10 +428,13 @@ const STAGES = {
   compress() {
     put(dropzone(), fileList(), summaryLine());
     if (!ready().length) return;
-    const o = pref("compress", { level: 6, strip: false });
-    put(el("div", { class: "panel" }, el("h3", {}, "Options"), el("div", { class: "row" }, segmented([[6, "Balanced (fast)"], [10, "Smallest (slower)"]], o.level, (v) => (o.level = v), "Compression level")), el("div", { class: "row" }, check("Also remove hidden metadata (author, editing history, thumbnails)", o.strip, (v) => (o.strip = v))),
-      el("p", { class: "summary", style: "margin:12px 0 0" }, "Text and graphics are repacked losslessly; scanned pages and photos are kept exactly as they are, so quality never drops. Files that are already tight may not shrink much.")),
-      cta(`Compress ${ready().length > 1 ? plural(ready().length, "file") : "PDF"}`, () => runJob("Compressing", () => perFile("-compressed", () => {}, { compress: true, compressionLevel: o.level, stripMetadata: o.strip }, { showSavings: true }))));
+    const o = pref("compress", { level: 6, strip: false, images: "none" });
+    const IMG = { none: null, print: { maxDpi: 300, quality: 85 }, ebook: { maxDpi: 150, quality: 75 }, screen: { maxDpi: 96, quality: 60 } };
+    put(el("div", { class: "panel" }, el("h3", {}, "Options"),
+      el("div", { class: "row" }, field("Pictures and scans", segmented([["none", "Keep as they are"], ["print", "Print quality (300 dpi)"], ["ebook", "Good (150 dpi)"], ["screen", "Small (96 dpi)"]], o.images, (v) => (o.images = v), "Image quality"), o.images === "none" ? "Lossless: images are untouched, so quality never drops." : "Oversized images are scaled down to the chosen resolution and saved as JPEG. This is what makes scanned documents small.")),
+      el("div", { class: "row" }, segmented([[6, "Balanced (fast)"], [10, "Smallest (slower)"]], o.level, (v) => (o.level = v), "Compression level")), el("div", { class: "row" }, check("Also remove hidden metadata (author, editing history, thumbnails)", o.strip, (v) => (o.strip = v))),
+      el("p", { class: "summary", style: "margin:12px 0 0" }, "Text and graphics are always repacked losslessly. Files that are already tight may not shrink much.")),
+      cta(`Compress ${ready().length > 1 ? plural(ready().length, "file") : "PDF"}`, () => runJob("Compressing", () => perFile("-compressed", (doc, f, out) => { if (IMG[o.images]) { const r = doc.compressImages(IMG[o.images]); if (r.recompressed) out.note = `${r.recompressed} of ${plural(r.images, "image")} made smaller (${r.downsampled} scaled down).`; else if (r.images) out.note = "Images were already small enough."; } }, { compress: true, compressionLevel: o.level, stripMetadata: o.strip }, { showSavings: true }))));
   },
   protect() {
     put(dropzone(), fileList(), summaryLine());

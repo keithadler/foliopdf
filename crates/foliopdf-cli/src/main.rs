@@ -34,6 +34,7 @@ COMMANDS
   reverse  <in.pdf> <out.pdf>
   blank    <in.pdf> <out.pdf> [--at N] [--count 1] [--size a4]   Insert blank pages before page N
   compress <in.pdf> <out.pdf> [--level 1-10] [--strip-metadata]
+                              [--images [--dpi 150] [--quality 75] [--keep-lossless]]
   encrypt  <in.pdf> <out.pdf> [--user PW] [--owner PW] [--method aes256|aes128|rc4]
                               [--no-print] [--no-copy] [--no-modify] [--no-annotate]
   decrypt  <in.pdf> <out.pdf> --password PW
@@ -472,6 +473,26 @@ fn compress(args: &Args) -> Result<(), String> {
         .map(|m| m.len() as usize)
         .unwrap_or(0);
     let mut doc = load(args, input)?;
+    if args.has("images") {
+        let o = foliopdf::compress::ImageOptions {
+            max_dpi: args.num("dpi", 150.0)?,
+            quality: args.num("quality", 75u8)?,
+            convert_lossless: !args.has("keep-lossless"),
+            ..Default::default()
+        };
+        let r = foliopdf::compress::compress_images(&mut doc, &o).map_err(|e| e.to_string())?;
+        eprintln!(
+            "folio: {} of {} images recompressed ({} downsampled), image data {} -> {}",
+            r.recompressed,
+            r.images,
+            r.downsampled,
+            human(r.bytes_before),
+            human(r.bytes_after)
+        );
+        for w in &r.skipped {
+            eprintln!("folio: kept: {w}");
+        }
+    }
     let opts = SaveOptions {
         compress: true,
         ..save_opts(args)?

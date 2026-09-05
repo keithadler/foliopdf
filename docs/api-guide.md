@@ -228,6 +228,18 @@ fonts, so characters outside WinAnsi (Cyrillic, CJK, …) are shown as `?`;
 see [limitations.md](limitations.md). Merging or extracting pages keeps
 their fields, renaming on clashes.
 
+## Smaller images
+
+```rust
+use foliopdf::compress::{self, ImageOptions};
+let report = compress::compress_images(&mut doc, &ImageOptions { max_dpi: 150.0, quality: 75, ..Default::default() })?;
+println!("{} of {} images, {} → {} bytes", report.recompressed, report.images, report.bytes_before, report.bytes_after);
+```
+
+Lossy: images displayed above `max_dpi` are downsampled (area averaging)
+and grey/RGB images are re-encoded as JPEG. Save with `compress: true`
+afterwards. Unsupported images are listed in `report.skipped`.
+
 ## Text: extract, search
 
 ```rust

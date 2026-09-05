@@ -35,6 +35,7 @@
 //! * [`forms`] – list, fill and flatten interactive form fields.
 //! * [`text`] – extract text with positions, and search.
 //! * [`redact`] – remove text, graphics and image pixels under an area.
+//! * [`compress`] – downsample and re-encode images for much smaller files.
 //! * [`batch`] – run a JSON-described pipeline over many files; store and
 //!   reuse export presets.
 //! * [`object`] – the low-level object model when you need full control.
@@ -55,6 +56,7 @@
 
 pub mod annot;
 pub mod batch;
+pub mod compress;
 pub mod content;
 pub mod crypto;
 pub mod cstream;

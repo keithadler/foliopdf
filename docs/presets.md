@@ -59,6 +59,7 @@ all pages.
 | `resize` | `pages?`, `size` or `width`+`height`, `mode?` | Change the page size, scaling content to match. `size` is `letter`, `legal`, `tabloid`, `a3`, `a4`, `a5` (add `-landscape` to turn it); `width`/`height` are points. `mode`: `fit` (default, keeps everything), `fill` (crops), `stretch`. |
 | `scale` | `pages?`, `factor` | Multiply the page size and its content; `0.5` halves. |
 | `reverse` | – | Reverse the page order. |
+| `compress-images` | `maxDpi?`, `quality?`, `convertLossless?`, `minPixels?` | Lossy: downsample images shown above `maxDpi` (default 150) and re-encode grey/RGB images as JPEG at `quality` (default 75). CMYK, indexed, 1-bit and JPEG 2000 images are kept. |
 | `blank-pages` | `at?`, `count?`, `size?` | Insert `count` (default 1) empty pages before 1-based page `at` (omit to append). `size` as for `resize`; default matches the neighbouring page. |
 | `split` | `every?` or `ranges?` | Produce several files. Must be the **last** step. |
 
