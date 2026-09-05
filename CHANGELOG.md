@@ -6,6 +6,12 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-04
+
+The "no one needs Adobe" release: forms, signing, comments, redaction,
+text extraction and search, image compression, bookmarks, cropping,
+conversions, and an installable web app.
+
 ### Changed
 - `EncryptionOptions.method` now serialises as `aes-256`, `aes-128` and
   `rc4-128` as documented; the old spellings (`aes256`, `aes128`, `rc4`) are

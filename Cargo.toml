@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/foliopdf", "crates/foliopdf-wasm", "crates/foliopdf-cli"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.75"
 license = "MIT"
@@ -14,7 +14,7 @@ keywords = ["pdf", "wasm", "merge", "encrypt", "compress"]
 categories = ["parser-implementations", "encoding", "wasm"]
 
 [workspace.dependencies]
-foliopdf = { path = "crates/foliopdf", version = "0.1.0" }
+foliopdf = { path = "crates/foliopdf", version = "0.2.0" }
 miniz_oxide = "0.8"
 md-5 = "0.10"
 sha2 = "0.10"

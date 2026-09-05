@@ -132,3 +132,22 @@ cycle-guarded, and truncated Flate streams yield what could be recovered.
 | `thiserror` | Error type derivation |
 
 No C code anywhere, so the same source builds for every target Rust does.
+
+## Added in 0.2
+
+| Module | Role |
+|---|---|
+| `cstream` | Tolerant content-stream parser and writer; inline images are kept as opaque byte runs. |
+| `text` | Content interpreter: graphics and text state, font decoding (encodings, Differences, ToUnicode, CMaps, W arrays, Type3), form XObjects; glyph positions with stream locations; lines, words, search. |
+| `redact` | Rewrites text operators glyph by glyph, drops covered paths, blanks image pixels (`imgcodec`), copies and rewrites forms, removes annotations, paints boxes. |
+| `annot` | Annotation dictionaries plus generated appearance streams; listing, removal, flattening (the §12.5.5 form-to-rect mapping). Display-space geometry. |
+| `forms` | AcroForm walking (inherited attributes, orphaned widgets), appearance generation from `DA`/`MK`, field creation, pruning; `Document::import_pages` calls back into it. |
+| `outline` | Bookmark tree read/write; destinations resolved through `/Dests` and the names tree; page maps for import and selection. |
+| `compress` | Lossy image pipeline: display-size analysis via `text`, area-averaged resampling, JPEG re-encoding. |
+| `imgcodec` | Raw/Flate/JPEG image sample access shared by `redact` and `compress` (`jpeg` feature: jpeg-decoder, jpeg-encoder). |
+| `glyphlist` | Glyph-name and encoding tables. |
+
+The web editor (`examples/web/editor.js`) draws pages with pdf.js and
+keeps everything the user adds as plain items in page points; only on
+save does it call the engine (`addAnnotation`, `setFields`, `redact`,
+`cropPages`, …), so the engine never depends on the browser.

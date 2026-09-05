@@ -84,7 +84,7 @@ const TOOLS = [
   { id: "images",    ico: "🖼️", name: "Images to PDF",     desc: "Turn photos, scans and screenshots (JPEG, PNG, WebP, HEIC…) into one PDF.", multi: true, accept: "image" },
   { id: "toimages",  ico: "🏞️", name: "PDF to images",     desc: "Save every page as a PNG or JPEG picture." },
   { id: "split",     ico: "✂️", name: "Split PDF",         desc: "Break a file into parts, or pull out just the pages you need." },
-  { id: "compress",  ico: "🗜️", name: "Compress PDF",      desc: "Make files smaller without touching the quality of scans or photos.", multi: true },
+  { id: "compress",  ico: "🗜️", name: "Compress PDF",      desc: "Make files smaller. Keep images as they are, or shrink scans and photos too.", multi: true },
   { id: "protect",   ico: "🔒", name: "Protect PDF",       desc: "Add a password and stop copying, printing or editing.", multi: true },
   { id: "unlock",    ico: "🔓", name: "Unlock PDF",        desc: "Remove a password from a file you have the password for.", multi: true },
   { id: "rotate",    ico: "🔄", name: "Rotate PDF",        desc: "Turn every page, or just the odd or even ones.", multi: true },

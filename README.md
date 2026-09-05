@@ -108,7 +108,7 @@ cargo install foliopdf-cli
 
 ```toml
 [dependencies]
-foliopdf = "0.1"
+foliopdf = "0.2"
 ```
 
 **JavaScript / TypeScript**:
