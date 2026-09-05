@@ -71,6 +71,36 @@ const out: Uint8Array = doc.save({
 Errors throw a JavaScript `Error` whose message is the Rust error text, e.g.
 `the password does not open this document`.
 
+## Annotations and forms
+
+Geometry is in *screen* coordinates: points from the top-left corner of the
+page as displayed, y downwards, so an overlay drawn over a rendered page
+maps directly (divide CSS pixels by your zoom factor).
+
+```ts
+const id = doc.addAnnotation(0, { kind: "highlight", quads: [{ x0: 72, y0: 80, x1: 300, y1: 94 }] }, { author: "Ada" });
+doc.addAnnotation(0, { kind: "free-text", rect: { x0: 72, y0: 120, x1: 300, y1: 160 }, text: "Approved", size: 14, color: [0, 0.4, 0] });
+doc.addAnnotation(0, { kind: "ink", paths: [[{ x: 10, y: 10 }, { x: 60, y: 40 }]], color: [0.8, 0, 0], width: 3 });
+doc.addAnnotation(0, { kind: "note", at: { x: 400, y: 100 } }, { contents: "Remember this" });
+doc.addImageAnnotation(0, { x0: 350, y0: 700, x1: 500, y1: 750 }, signaturePng);   // JPEG or PNG bytes
+doc.annotations(0);                                   // AnnotInfo[]: subtype, rect, author, contents, object
+doc.removeAnnotation(0, 2);                           // by index
+doc.flattenAnnotations(null, { objects: [id] });      // burn selected ones into the page
+doc.flattenAnnotations("1-3", {});                    // everything on pages 1–3, widgets included
+
+doc.fields();                                         // Field[]: name, kind, value, options, widgets
+doc.setField("name", "Ada Lovelace");
+doc.setField("agree", true);
+doc.setField("colour", "Blue");                       // radio export value
+doc.setFields({ city: "London", toppings: ["ham", "olives"] });   // returns unknown names
+doc.flattenFields();                                  // make the form permanent
+doc.addField(0, { name: "email", rect: { x0: 72, y0: 80, x1: 300, y1: 104 }, border: [0.5, 0.5, 0.5] });
+doc.removeField("email");
+```
+
+The web app's Fill & Sign, Fill a form and Comment tools are built on
+exactly these calls (see `examples/web/editor.js`).
+
 ## Merge
 
 ```ts

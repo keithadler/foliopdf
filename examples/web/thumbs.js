@@ -15,6 +15,15 @@ function lib() {
 /** Whether thumbnails can be produced at all (resolves once). */
 export async function available() { return !!(await lib()); }
 
+/** The pdf.js module itself (null when unavailable). */
+export const pdfjs = () => lib();
+
+/** Opens a PDF with pdf.js for on-screen rendering; null when pdf.js is missing or the file cannot be opened. */
+export async function openPdf(bytes, password) {
+  const p = await lib(); if (!p) return null;
+  try { return await p.getDocument({ data: bytes.slice(), password: password || undefined, isEvalSupported: false }).promise; } catch { return null; }
+}
+
 const MAX_CONCURRENT = 2;
 let active = 0;
 const queue = [];
@@ -67,6 +76,6 @@ export function thumbnailer(bytes, password) {
       cache.set(key, p);
       return p;
     },
-    destroy() { destroyed = true; cache.clear(); docPromise?.then((d) => d?.destroy?.()).catch(() => {}); },
+    destroy() { destroyed = true; cache.clear(); docPromise?.then((d) => d?.loadingTask?.destroy?.()).catch(() => {}); },
   };
 }

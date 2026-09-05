@@ -167,6 +167,67 @@ doc.draw(0, &cb.finish())?;        // on top; doc.draw_under(...) for beneath
 TrueType fonts are subset when the document is saved, so draw all your text
 before calling `save`.
 
+## Annotations
+
+Highlights, underlines, strike-outs, boxes, circles, lines, freehand ink,
+text boxes, sticky notes, links and image stamps. Every annotation gets an
+appearance stream, so it looks the same in every viewer. Geometry is in
+*display space*: points from the bottom-left of the page as the reader sees
+it (rotation and crop boxes are handled for you).
+
+```rust
+use foliopdf::annot::{self, Annotation, AnnotationMeta, FlattenOptions, Align};
+use foliopdf::{Rect, Point};
+
+let meta = AnnotationMeta { author: Some("Ada".into()), contents: Some("Check this".into()), ..Default::default() };
+let hl = annot::add_annotation(&mut doc, 0, &Annotation::Highlight {
+    quads: vec![Rect::new(72.0, 700.0, 300.0, 714.0)], color: [1.0, 0.92, 0.23], opacity: 1.0,
+}, &meta)?;
+annot::add_annotation(&mut doc, 0, &Annotation::FreeText {
+    rect: Rect::new(72.0, 600.0, 300.0, 660.0), text: "Approved".into(), font: "Helvetica-Bold".into(),
+    size: 14.0, color: [0.0, 0.4, 0.0], align: Align::Center, background: None, border: None, opacity: 1.0,
+}, &Default::default())?;
+annot::add_image_annotation(&mut doc, 0, Rect::new(350.0, 80.0, 500.0, 130.0), &signature_png, 1.0, &meta)?;
+
+for a in annot::list_annotations(&doc, 0)? { println!("{} {:?} {:?}", a.subtype, a.rect, a.author); }
+annot::remove_annotation(&mut doc, 0, 2)?;                       // by index
+annot::flatten_annotations(&mut doc, &[0], &FlattenOptions { objects: Some(vec![hl.num]), ..Default::default() })?;
+annot::flatten_annotations(&mut doc, &all_pages, &Default::default())?;   // everything, form widgets included
+```
+
+`flatten_annotations` paints each appearance into the page content and
+removes the annotation, which is how "burn in" or "make permanent" works.
+Links have no appearance and stay.
+
+## Forms
+
+```rust
+use foliopdf::forms::{self, FieldValue, FieldKind, NewField};
+
+for f in forms::list_fields(&doc) {
+    println!("{} {:?} = {:?} on page {:?}", f.name, f.kind, f.value, f.page);
+}
+forms::set_field(&mut doc, "name", &FieldValue::Text("Ada Lovelace".into()))?;
+forms::set_field(&mut doc, "agree", &FieldValue::Bool(true))?;
+forms::set_field(&mut doc, "colour", &FieldValue::Text("Blue".into()))?;     // radio: export value
+forms::set_field(&mut doc, "toppings", &FieldValue::List(vec!["ham".into(), "olives".into()]))?;
+let missing = forms::set_fields(&mut doc, &values)?;                         // many at once; returns unknown names
+forms::flatten_fields(&mut doc)?;                                            // fields become plain page content
+
+// Build a form from scratch.
+forms::add_field(&mut doc, 0, &NewField { name: "email".into(), rect: Rect::new(72.0, 700.0, 300.0, 724.0), border: Some([0.5; 3]), ..Default::default() })?;
+forms::add_field(&mut doc, 0, &NewField { name: "size".into(), kind: FieldKind::Radio, rect: Rect::new(72.0, 660.0, 200.0, 680.0), options: vec!["S".into(), "M".into(), "L".into()], ..Default::default() })?;
+forms::remove_field(&mut doc, "email")?;
+```
+
+Filling regenerates the field's appearance stream (font, size and colour
+from the field's default appearance, background and border from its `MK`
+dictionary; multi-line wrapping, comb cells, password masking, auto font
+size and rotated widgets are handled). Text is drawn with the standard 14
+fonts, so characters outside WinAnsi (Cyrillic, CJK, …) are shown as `?`;
+see [limitations.md](limitations.md). Merging or extracting pages keeps
+their fields, renaming on clashes.
+
 ## Low level
 
 ```rust

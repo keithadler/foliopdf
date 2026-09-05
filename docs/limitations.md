@@ -8,15 +8,22 @@ when you need one of these.
 - **Rendering** pages to bitmaps. Use pdf.js, MuPDF or PDFium.
 - **Text extraction** with layout. `Document::page_content` gives you the
   raw operators, but there is no text-run reconstruction or font decoding.
-- **Form filling** and AcroForm field manipulation. Widget annotations on
-  pages survive merging and splitting, but the `/AcroForm` field tree is not
-  copied, so fields in a merged document may lose interactivity.
 - **Outlines (bookmarks)**, named destinations and article threads are not
   carried across `import_pages`/merge. They are preserved when you edit a
   single document in place.
-- **Digital signatures.** Existing signatures are invalidated by any save
-  (that is inherent to signing); creating signatures is out of scope.
-- **Redaction.** Stamps draw over content; they do not remove it.
+- **Cryptographic digital signatures.** Existing signatures are invalidated
+  by any save (that is inherent to signing); creating certificate-based
+  signatures is out of scope. Drawn, typed or scanned signatures placed as
+  images are supported.
+- **Non-Latin text in generated appearances.** Filled fields, text boxes
+  and stamps are drawn with the standard 14 fonts (WinAnsi); Cyrillic, Greek,
+  CJK and other scripts come out as `?`. The Rust API can draw with an
+  embedded TrueType font; the form and annotation helpers cannot yet.
+- **Rich text** (`/RV`) in fields and free-text annotations is ignored;
+  plain text is drawn. XFA forms are not supported (only the AcroForm part).
+- **JavaScript** actions in forms (calculations, validation) are not run.
+- **Redaction.** Stamps and annotations draw over content; they do not
+  remove it.
 - **Linearisation** (fast web view). Output is compact but not linearised.
 - **Incremental updates.** Every save is a full rewrite. This is deliberate.
 - **Public-key encryption** (`/Filter /Adobe.PubSec`). Only the standard

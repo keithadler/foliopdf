@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>foliopdf — free PDF tools that stay on your device</title>
-<meta name="description" content="Merge, split, compress, protect, unlock, rotate, watermark and number PDFs in your browser. Free, open source, and nothing is uploaded.">
+<meta name="description" content="Fill and sign PDFs, fill forms, add comments, merge, split, compress, protect, unlock, rotate, watermark and number PDFs in your browser. Free, open source, and nothing is uploaded.">
 <meta name="theme-color" content="#2563eb">
 <script>
   // Apply the saved theme before first paint to avoid a flash.
@@ -195,6 +195,60 @@
   .tip { margin-top: 16px; font-size: 14px; color: var(--muted); }
   .tip a { color: var(--accent); text-decoration: none; font-weight: 600; }
   .tip a:hover { text-decoration: underline; }
+  /* ---- page editor ---- */
+  .editorpanel { padding: 0; overflow: hidden; }
+  .editor { display: flex; flex-direction: column; min-height: 420px; }
+  .etoolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--line); flex-wrap: wrap; position: sticky; top: 0; background: var(--card); z-index: 5; }
+  .etools { display: flex; gap: 2px; flex-wrap: wrap; }
+  .etool { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 56px; padding: 5px 6px; border: 1px solid transparent; background: transparent; border-radius: 10px; cursor: pointer; font-size: 11px; color: var(--muted); }
+  .etool .eico { font-size: 17px; line-height: 1.1; color: var(--ink); }
+  .etool:hover { border-color: var(--line); } .etool.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .eright { display: flex; align-items: center; gap: 4px; } .esep { width: 1px; height: 22px; background: var(--line); margin: 0 6px; } .ezoom { font-size: 13px; color: var(--muted); min-width: 44px; text-align: center; }
+  .eprops { display: flex; align-items: center; gap: 14px; padding: 6px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; min-height: 40px; font-size: 14px; }
+  .eprop { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; } .eprop.grow { flex: 1; } .eprop.grow textarea { flex: 1; min-width: 200px; }
+  .eprop input[type=number] { width: 64px; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: inherit; }
+  .eprop input[type=range] { width: 90px; } .eprops .swatches { padding: 0; gap: 5px; } .eprops .swatch { width: 22px; height: 22px; } .eprops .seg button { padding: 5px 10px; font-size: 13px; }
+  .btn.danger { color: var(--err); }
+  .ehint { font-size: 13px; color: var(--muted); padding: 6px 12px; border-bottom: 1px solid var(--line); background: var(--bg); }
+  .epages { background: #6b7280; padding: 16px; overflow: auto; max-height: 78vh; outline: none; }
+  :root[data-theme="dark"] .epages { background: #0f1319; }
+  .epage { position: relative; margin: 0 auto 16px; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.35); user-select: none; }
+  .epage canvas { display: block; position: absolute; left: 0; top: 0; }
+  .epage .textLayer, .epage .efields, .epage .eovl { position: absolute; inset: 0; }
+  .textLayer { overflow: hidden; line-height: 1; text-size-adjust: none; forced-color-adjust: none; transform-origin: 0 0; user-select: text; z-index: 1; }
+  .textLayer span, .textLayer br { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0 0; }
+  .textLayer ::selection { background: rgba(37, 99, 235, .3); }
+  .textLayer .endOfContent { display: block; position: absolute; inset: 100% 0 0; z-index: -1; cursor: default; user-select: none; }
+  .epages[data-tool="select"] .textLayer, .epages[data-tool="text"] .textLayer, .epages[data-tool="pen"] .textLayer, .epages[data-tool="rect"] .textLayer, .epages[data-tool="ellipse"] .textLayer, .epages[data-tool="line"] .textLayer, .epages[data-tool="note"] .textLayer, .epages[data-tool="sign"] .textLayer, .epages[data-tool="image"] .textLayer { pointer-events: none; }
+  .eovl { z-index: 2; touch-action: none; }
+  .epages[data-tool="highlight"] .eovl, .epages[data-tool="underline"] .eovl, .epages[data-tool="strike"] .eovl { pointer-events: none; }
+  .epages[data-tool="highlight"] .eovl .eitem, .epages[data-tool="underline"] .eovl .eitem, .epages[data-tool="strike"] .eovl .eitem { pointer-events: auto; }
+  .epages[data-tool="text"] .eovl, .epages[data-tool="date"] .eovl { cursor: text; } .epages[data-tool="pen"] .eovl, .epages[data-tool="rect"] .eovl, .epages[data-tool="ellipse"] .eovl, .epages[data-tool="line"] .eovl { cursor: crosshair; }
+  .epages[data-tool="check"] .eovl, .epages[data-tool="cross"] .eovl, .epages[data-tool="dot"] .eovl, .epages[data-tool="sign"] .eovl, .epages[data-tool="initials"] .eovl, .epages[data-tool="image"] .eovl, .epages[data-tool="note"] .eovl { cursor: copy; }
+  .efields { z-index: 1; }
+  .efield { position: absolute; box-sizing: border-box; border: 1px solid rgba(37, 99, 235, .55); background: rgba(37, 99, 235, .09); color: #000; font: inherit; padding: 0 3px; border-radius: 2px; outline: none; }
+  .efield:focus { border-color: #2563eb; background: rgba(37, 99, 235, .14); box-shadow: 0 0 0 2px rgba(37, 99, 235, .25); }
+  textarea.efield { resize: none; line-height: 1.2; padding: 2px 3px; }
+  .efield.ebox { display: grid; place-items: center; padding: 0; cursor: pointer; } .efield.ebox input { margin: 0; width: 70%; height: 70%; accent-color: #2563eb; }
+  .efield.esig { color: #2563eb; font-size: 12px; cursor: pointer; }
+  .eitem { position: absolute; box-sizing: border-box; cursor: move; border: 1px dashed transparent; }
+  .eitem:hover { border-color: rgba(37, 99, 235, .5); } .eitem.sel { border-color: #2563eb; }
+  .eitem .etext { position: absolute; inset: 0; outline: none; white-space: pre-wrap; word-break: break-word; cursor: text; overflow: hidden; }
+  .eitem .eglyph { position: absolute; inset: 0; text-align: center; font-weight: 700; font-family: Helvetica, Arial, sans-serif; }
+  .eitem img { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .eitem .eshape { position: absolute; inset: 0; box-sizing: border-box; }
+  .eitem .equad { position: absolute; }
+  .eitem.highlight, .eitem.underline, .eitem.strike { cursor: default; }
+  .eitem .enote { position: absolute; inset: 0; border-radius: 4px; display: grid; place-items: center; font-size: 13px; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+  .ehandle { position: absolute; width: 12px; height: 12px; background: #fff; border: 2px solid #2563eb; border-radius: 50%; display: none; z-index: 3; }
+  .eitem.sel .ehandle { display: block; } .ehandle.se { right: -7px; bottom: -7px; cursor: nwse-resize; } .ehandle.e { right: -7px; top: 50%; margin-top: -6px; cursor: ew-resize; }
+  .esigdlg { border: 0; border-radius: 16px; padding: 20px 22px; max-width: 560px; width: calc(100% - 32px); background: var(--card); color: var(--ink); box-shadow: 0 20px 60px rgba(0,0,0,.4); }
+  .esigdlg::backdrop { background: rgba(0,0,0,.45); } .esigdlg h3 { margin: 0 0 12px; }
+  .esigbody { margin-top: 12px; } .esigbody input[type=text] { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: inherit; }
+  .esigpad { width: 100%; height: auto; aspect-ratio: 8 / 3; background: #fff; border: 1px dashed var(--line-strong); border-radius: 10px; touch-action: none; cursor: crosshair; display: block; }
+  .esigpreview { margin-top: 12px; background: #fff; border-radius: 10px; min-height: 90px; display: grid; place-items: center; font-size: 44px; padding: 8px 16px; overflow: hidden; }
+  .esigimg { max-width: 100%; max-height: 160px; margin-top: 10px; background: #fff; display: block; }
+  @media (max-width: 600px) { .etool { min-width: 44px; } .etool .elabel { display: none; } .epages { padding: 8px; max-height: 70vh; } }
   .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: 15px; box-shadow: var(--shadow); z-index: 60; opacity: 0; transition: opacity .2s; pointer-events: none; }
   .toast.show { opacity: 1; }
   @media (max-width: 600px) {
@@ -220,7 +274,7 @@
   <section class="view active" id="view-home">
     <div class="hero">
       <h1>Every PDF tool you pay for.<br>Free, and nothing leaves your device.</h1>
-      <p>Merge, split, compress, protect, rotate, watermark. It all runs right here in your browser, so your files are never uploaded anywhere.</p>
+      <p>Fill and sign, fill forms, comment, merge, split, compress, protect, rotate, watermark. It all runs right here in your browser, so your files are never uploaded anywhere.</p>
       <div class="pill" id="status" role="status">Loading…</div>
     </div>
     <div class="grid" id="tools"></div>

@@ -12,6 +12,20 @@ All notable changes to this project are recorded here. The format follows
   still accepted when reading.
 
 ### Added
+- Interactive forms (`forms` module): list fields, fill text / check box /
+  radio / drop-down / list fields with generated appearances, create and
+  remove fields, flatten. Merging and extracting pages now carries form
+  fields along (renamed on clashes). CLI `fields`, `fill`, `flatten`; wasm
+  `fields`, `setField(s)`, `addField`, `removeField`, `flattenFields`.
+- Annotations (`annot` module): highlight, underline, strike-out, square,
+  circle, line, ink, free text, sticky note, link and image stamp, each with
+  an appearance stream; list, remove, and flatten (all or selected). CLI
+  `annots`, `flatten`; wasm `annotations`, `addAnnotation`,
+  `addImageAnnotation`, `removeAnnotation(s)`, `flattenAnnotations`.
+- Web app: Fill & Sign (type, tick, date, draw/type/upload a signature),
+  Fill a form (fields overlaid on the page, keep editable or flatten), and
+  Comment & mark up (select text to highlight, draw, notes, shapes, stamps),
+  all on a zoomable page view with undo.
 - `ops::resize_pages`, `ops::scale_pages`, `ops::reverse_pages` and
   `ops::insert_blank_pages`; batch steps `resize`, `scale`, `reverse` and
   `blank-pages`; CLI commands `resize`, `reverse` and `blank`; wasm methods

@@ -2,17 +2,19 @@
 
 Fast, portable PDF editing. Pure Rust, compiles to WebAssembly, MIT licensed.
 
-Open PDFs (including damaged and encrypted ones), then merge, split, reorder,
-rotate, stamp, compress and encrypt them, and write clean compact output.
-Runs in browsers, Node, Deno, Bun and natively on Linux, macOS and Windows.
+Open PDFs (including damaged and encrypted ones), then fill forms, sign,
+annotate, merge, split, reorder, rotate, resize, stamp, compress and encrypt
+them, and write clean compact output. Runs in browsers, Node, Deno, Bun and
+natively on Linux, macOS and Windows.
 
-- **Web app**: [keithadler.github.io/foliopdf](https://keithadler.github.io/foliopdf/), every tool in the browser, nothing uploaded.
+- **Web app**: [keithadler.github.io/foliopdf](https://keithadler.github.io/foliopdf/): fill & sign, fill forms, comment and mark up, merge, split, compress, protect, organize, watermark and more, all in the browser, nothing uploaded.
 - **Rust crate** `foliopdf`: the engine, no I/O, no `unsafe`.
 - **npm package** `foliopdf`: WebAssembly bindings with TypeScript types.
 - **CLI** `folio`: single binary for scripts and shells.
 
 ```bash
 folio merge out.pdf a.pdf b.pdf c.pdf
+folio fill form.pdf done.pdf --set name="Ada Lovelace" --set agree=true --flatten
 folio encrypt out.pdf locked.pdf --owner s3cret --no-copy --no-modify
 folio stamp report.pdf draft.pdf --text DRAFT --rotation 45 --opacity 0.3
 folio batch presets.json --preset draft-watermark *.pdf --out-dir out/
@@ -23,6 +25,8 @@ import init, { PdfDocument } from "foliopdf";
 await init();
 
 const doc = PdfDocument.load(bytes);          // Uint8Array
+doc.setField("name", "Ada Lovelace");
+doc.addAnnotation(0, { kind: "highlight", quads: [{ x0: 72, y0: 80, x1: 300, y1: 94 }] }, { author: "Ada" });
 doc.deletePages("2,5-7");
 doc.stampText(null, { text: "CONFIDENTIAL", rotation: 45, opacity: 0.25 });
 doc.addPageNumbers(null, { format: "{page} / {pages}" });
@@ -63,13 +67,15 @@ and the result has one clean cross-reference section.
 | Encryption out | AES-256 (default), AES-128, RC4-128; full permission flags; optional unencrypted metadata |
 | Pages | insert, delete, reorder, duplicate, rotate, reverse, blank pages; resize to A4/Letter/any size or scale, with content and annotations scaled to match; import pages between documents with all their dependencies |
 | Merge and split | merge any number of files; split by page count or by ranges; page-range language `1-3,7,odd,last,r2` |
+| Forms | list fields (text, check box, radio, drop-down, list, signature), fill them with generated appearances, create and remove fields, flatten; fields survive merging and extraction |
+| Annotations | highlight, underline, strike-out, box, circle, line, ink, text box, sticky note, link, image stamp (signatures), each with an appearance stream; list, remove, flatten selectively |
 | Stamps | text watermarks and image logos (JPEG/PNG with alpha) with opacity, rotation and nine anchor positions; page numbers; stamps stay upright on rotated pages |
 | Fonts | standard 14 with real metrics; embedded TrueType/OpenType with glyph subsetting and ToUnicode |
 | Compression | stream recompression, object streams, cross-reference streams, dedup of identical fonts and images, metadata stripping |
 | Batch | JSON presets: merge-or-each modes, ordered steps, output naming templates, encryption; `PresetStore` for saving export configurations |
 
 Not in scope (yet): rendering pages to pixels, text extraction with layout,
-form filling, digital signatures, redaction. See [docs/limitations.md](docs/limitations.md).
+cryptographic digital signatures, redaction. See [docs/limitations.md](docs/limitations.md).
 
 ## Install
 
@@ -143,7 +149,7 @@ the input size. WebAssembly runs at roughly half native speed.
 crates/foliopdf        core library (parser, writer, crypto, fonts, ops, batch)
 crates/foliopdf-wasm   wasm-bindgen bindings + TypeScript types
 crates/foliopdf-cli    the `folio` binary
-examples/web           the free web app (every tool, thumbnails, preset builder; all in the browser)
+examples/web           the free web app (fill & sign, forms, comments, every tool, preset builder; all in the browser)
 examples/node          Node smoke test for the npm package
 docs/                  guides
 ```

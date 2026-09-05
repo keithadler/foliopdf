@@ -7,9 +7,11 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use foliopdf::annot::{self, FlattenOptions};
 use foliopdf::batch::{self, Asset, Input, Preset, PresetStore};
 use foliopdf::crypto::{EncryptionOptions, Method, Permissions};
 use foliopdf::document::Metadata;
+use foliopdf::forms::{self, FieldValue};
 use foliopdf::ops::{self, ImageStamp, PageNumbers, Position, TextStamp};
 use foliopdf::{Document, LoadOptions, SaveOptions};
 
@@ -40,6 +42,11 @@ COMMANDS
   numbers  <in.pdf> <out.pdf> [--format \"{page} / {pages}\"] [--position bottom-center]
                               [--size 10] [--pages all] [--start 1]
   meta     <in.pdf> <out.pdf> [--title T] [--author A] [--subject S] [--keywords K]
+  fields   <in.pdf> [--json]               List form fields and their values
+  fill     <in.pdf> <out.pdf> --set name=value... [--data values.json] [--flatten]
+  annots   <in.pdf> [--json]               List annotations
+  flatten  <in.pdf> <out.pdf> [--forms | --annots] [--pages all]
+                                           Burn form fields and/or annotations into the pages
   batch    <preset.json> <in.pdf>... [--out-dir D] [--asset name=path]...
   presets  [export <file.json>]           List built-in presets or write them as a store
 
@@ -172,6 +179,10 @@ fn run(argv: &[String]) -> Result<(), String> {
         "stamp" => stamp(&args),
         "numbers" => numbers(&args),
         "meta" => meta(&args),
+        "fields" => fields(&args),
+        "fill" => fill(&args),
+        "annots" => annots(&args),
+        "flatten" => flatten(&args),
         "batch" => batch_cmd(&args),
         "presets" => presets(&args),
         other => Err(format!("unknown command '{other}'\n\n{HELP}")),
@@ -589,6 +600,209 @@ fn meta(args: &Args) -> Result<(), String> {
     };
     doc.set_metadata(&m);
     write(&mut doc, out, &save_opts(args)?)
+}
+
+fn fields(args: &Args) -> Result<(), String> {
+    let input = args.pos(1, "input file")?;
+    let doc = load(args, input)?;
+    let list = forms::list_fields(&doc);
+    if args.has("json") {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&list).map_err(|e| e.to_string())?
+        );
+        return Ok(());
+    }
+    if list.is_empty() {
+        println!("no form fields");
+        return Ok(());
+    }
+    for f in &list {
+        let value = match (&f.value, f.values.len()) {
+            (_, n) if n > 1 => f.values.join(", "),
+            (Some(v), _) => v.clone(),
+            (None, _) => String::new(),
+        };
+        let page = f
+            .page
+            .map(|p| format!("p{}", p + 1))
+            .unwrap_or_else(|| "-".into());
+        let opts = if f.options.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "  [{}]",
+                f.options
+                    .iter()
+                    .map(|o| o.value.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" | ")
+            )
+        };
+        let flags = [
+            (f.required, "required"),
+            (f.read_only, "read-only"),
+            (f.multiline, "multiline"),
+        ]
+        .iter()
+        .filter(|(b, _)| *b)
+        .map(|(_, n)| *n)
+        .collect::<Vec<_>>()
+        .join(",");
+        println!(
+            "{:<32} {:<9} {:<4} = {:?}{}{}",
+            f.name,
+            format!("{:?}", f.kind).to_lowercase(),
+            page,
+            value,
+            opts,
+            if flags.is_empty() {
+                String::new()
+            } else {
+                format!("  ({flags})")
+            }
+        );
+    }
+    Ok(())
+}
+
+fn fill(args: &Args) -> Result<(), String> {
+    let (input, out) = (args.pos(1, "input file")?, args.pos(2, "output file")?);
+    let mut doc = load(args, input)?;
+    let mut values: Vec<(String, FieldValue)> = Vec::new();
+    if let Some(path) = args.flag("data") {
+        let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
+        let map: std::collections::BTreeMap<String, serde_json::Value> =
+            serde_json::from_str(&text).map_err(|e| format!("{path}: {e}"))?;
+        for (k, v) in map {
+            let fv = match v {
+                serde_json::Value::Bool(b) => FieldValue::Bool(b),
+                serde_json::Value::Array(a) => FieldValue::List(
+                    a.iter()
+                        .map(|x| {
+                            x.as_str()
+                                .map(str::to_owned)
+                                .unwrap_or_else(|| x.to_string())
+                        })
+                        .collect(),
+                ),
+                serde_json::Value::String(s) => FieldValue::Text(s),
+                serde_json::Value::Null => FieldValue::Text(String::new()),
+                other => FieldValue::Text(other.to_string()),
+            };
+            values.push((k, fv));
+        }
+    }
+    for kv in args.all("set") {
+        let (k, v) = kv
+            .split_once('=')
+            .ok_or_else(|| format!("--set expects name=value, got '{kv}'"))?;
+        let fv = match v {
+            "true" | "yes" | "on" => FieldValue::Bool(true),
+            "false" | "no" | "off" => FieldValue::Bool(false),
+            _ => FieldValue::Text(v.to_string()),
+        };
+        values.push((k.to_string(), fv));
+    }
+    if values.is_empty() {
+        return Err("nothing to fill: use --set name=value or --data values.json".into());
+    }
+    let missing = forms::set_fields(&mut doc, &values).map_err(|e| e.to_string())?;
+    for m in &missing {
+        eprintln!("folio: no field named '{m}' (run `folio fields` to list them)");
+    }
+    if args.has("flatten") {
+        forms::flatten_fields(&mut doc).map_err(|e| e.to_string())?;
+    }
+    write(&mut doc, out, &save_opts(args)?)?;
+    eprintln!(
+        "folio: filled {} field(s){}",
+        values.len() - missing.len(),
+        if args.has("flatten") {
+            ", flattened"
+        } else {
+            ""
+        }
+    );
+    Ok(())
+}
+
+fn annots(args: &Args) -> Result<(), String> {
+    let input = args.pos(1, "input file")?;
+    let doc = load(args, input)?;
+    let mut all = Vec::new();
+    for p in 0..doc.page_count() {
+        for a in annot::list_annotations(&doc, p).map_err(|e| e.to_string())? {
+            all.push((p, a));
+        }
+    }
+    if args.has("json") {
+        let rows: Vec<serde_json::Value> = all
+            .iter()
+            .map(|(p, a)| {
+                let mut v = serde_json::to_value(a).unwrap_or_default();
+                v["page"] = serde_json::Value::from(*p);
+                v
+            })
+            .collect();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&rows).map_err(|e| e.to_string())?
+        );
+        return Ok(());
+    }
+    if all.is_empty() {
+        println!("no annotations");
+        return Ok(());
+    }
+    for (p, a) in &all {
+        let who = a
+            .author
+            .clone()
+            .or_else(|| a.field.clone())
+            .unwrap_or_default();
+        let what = a
+            .contents
+            .clone()
+            .unwrap_or_default()
+            .replace(['\n', '\r'], " ");
+        println!(
+            "p{:<4} {:<10} {:<20} [{:.0} {:.0} {:.0} {:.0}] {}",
+            p + 1,
+            a.subtype,
+            who,
+            a.rect.x0,
+            a.rect.y0,
+            a.rect.x1,
+            a.rect.y1,
+            what
+        );
+    }
+    Ok(())
+}
+
+fn flatten(args: &Args) -> Result<(), String> {
+    let (input, out) = (args.pos(1, "input file")?, args.pos(2, "output file")?);
+    let mut doc = load(args, input)?;
+    let idx = range(args, &doc, "pages")?;
+    let only_forms = args.has("forms");
+    let only_annots = args.has("annots");
+    let opts = FlattenOptions {
+        widgets: Some(!only_annots),
+        subtypes: if only_forms {
+            Some(vec!["Widget".into()])
+        } else {
+            None
+        },
+        ..Default::default()
+    };
+    let n = annot::flatten_annotations(&mut doc, &idx, &opts).map_err(|e| e.to_string())?;
+    if !only_annots && idx.len() == doc.page_count() {
+        forms::remove_form(&mut doc);
+    }
+    write(&mut doc, out, &save_opts(args)?)?;
+    eprintln!("folio: flattened {n} annotation(s)");
+    Ok(())
 }
 
 fn batch_cmd(args: &Args) -> Result<(), String> {

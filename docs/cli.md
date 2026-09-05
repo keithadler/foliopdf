@@ -107,6 +107,31 @@ folio presets export presets.json
 List the built-in presets, or write them all to a store file you can edit
 and reuse.
 
+```
+folio fields <in.pdf> [--json]
+```
+Lists every form field: name, type, page, value, choices and flags.
+
+```
+folio fill <in.pdf> <out.pdf> --set name=value --set agree=true [--data values.json] [--flatten]
+```
+Fills fields by name. `true`/`false` (also `yes`/`no`, `on`/`off`) set
+check boxes; anything else is text, a drop-down's export value, or a radio
+button's choice. `--data` takes a JSON object (strings, booleans, or
+arrays for multi-select lists). Unknown names are reported and skipped.
+`--flatten` makes the result permanent.
+
+```
+folio annots <in.pdf> [--json]
+```
+Lists annotations with page, type, author, bounds and comment text.
+
+```
+folio flatten <in.pdf> <out.pdf> [--forms | --annots] [--pages all]
+```
+Paints annotations into the page content and removes them. `--forms` does
+only form fields, `--annots` only comments and markup; the default does both.
+
 ## Exit status and output
 
 `0` on success. Errors go to stderr prefixed with `folio:` and exit `1`.

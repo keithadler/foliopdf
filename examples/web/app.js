@@ -1,6 +1,7 @@
 import init, { PdfDocument, runBatch, PresetStore, parsePageRanges, version } from "./pkg/foliopdf.js";
 import { thumbnailer } from "./thumbs.js?v=dev";
 import { batchStage } from "./batch.js?v=dev";
+import { createEditor } from "./editor.js?v=dev";
 export { PdfDocument, runBatch, PresetStore, parsePageRanges };
 
 // ---------------------------------------------------------------- helpers
@@ -54,6 +55,9 @@ function pref(id, defaults) {
 
 // ---------------------------------------------------------------- tools
 const TOOLS = [
+  { id: "sign",      ico: "✍️", name: "Fill & Sign",       desc: "Type on any PDF, tick boxes, add the date, and draw or type your signature." },
+  { id: "forms",     ico: "📋", name: "Fill a form",       desc: "Fill in the fields of a PDF form, then keep it editable or flatten it." },
+  { id: "annotate",  ico: "💬", name: "Comment & mark up", desc: "Highlight, underline, draw, add notes, shapes and stamps." },
   { id: "merge",     ico: "🧩", name: "Merge PDFs",        desc: "Combine several files into one, in the order you choose.", multi: true },
   { id: "split",     ico: "✂️", name: "Split PDF",         desc: "Break a file into parts, or pull out just the pages you need." },
   { id: "compress",  ico: "🗜️", name: "Compress PDF",      desc: "Make files smaller without touching the quality of scans or photos.", multi: true },
@@ -616,8 +620,41 @@ const STAGES = {
       el("p", { class: "summary", style: "margin:6px 0 0" }, "Clearing a field removes it from the file.")),
       cta("Save changes", () => runJob("Updating", () => perFile("-edited", (doc) => { if (o.strip) doc.stripMetadata(); doc.setMetadata({ title: o.title, author: o.author, subject: o.subject, keywords: o.keywords }); }, { stripMetadata: false }))));
   },
+  sign() { editorStage("sign", "fill", "-signed", "Sign & save"); },
+  forms() { editorStage("forms", "forms", "-filled", "Save filled form"); },
+  annotate() { editorStage("annotate", "annotate", "-annotated", "Save"); },
   batch() { batchStage(); },
 };
+
+// A tool built on the page editor. State (items, form values, signature) is kept per file so "Adjust" returns to the same edits.
+let editor = null;
+export const getEditor = () => editor?.api;
+function editorStage(toolId, mode, suffix, label) {
+  put(dropzone(), fileList());
+  const f = ready()[0];
+  if (editor && (editor.file !== f || editor.mode !== mode)) { editor.api?.destroy(); editor = null; }
+  if (!f) return;
+  if (mode === "forms" && !f.doc.hasFields()) { put(notice("warn", "This PDF has no form fields. Use Fill & Sign to type on it instead."), el("div", { class: "cta" }, el("button", { class: "btn primary", onclick: () => open("sign") }, "Open in Fill & Sign"))); return; }
+  const o = pref(toolId, { flatten: mode !== "annotate", author: "" });
+  const host = el("div", { class: "panel editorpanel" }, el("p", { class: "summary" }, "Loading pages…"));
+  put(host);
+  const saveBar = el("div", { class: "panel" });
+  put(saveBar);
+  const mount = async () => {
+    try {
+      if (!editor) { const api = await createEditor(f, mode); editor = { file: f, mode, api }; }
+      host.innerHTML = ""; host.append(editor.api.root);
+      editor.api.mounted();
+    } catch (e) { host.innerHTML = ""; host.append(notice("err", friendly(e))); }
+  };
+  mount();
+  const opts = el("div", { class: "row" });
+  if (mode === "annotate") opts.append(check("Flatten: burn the comments into the page so they can't be edited or removed", o.flatten, (v) => (o.flatten = v)), field("Your name (shown on comments, optional)", el("input", { type: "text", value: o.author, placeholder: "e.g. Ada", oninput: (e) => (o.author = e.target.value) })));
+  else if (mode === "forms") opts.append(check("Flatten: make the filled form permanent (fields can no longer be changed)", o.flatten, (v) => (o.flatten = v)));
+  else opts.append(el("p", { class: "summary", style: "margin:0" }, "Everything you add becomes a permanent part of the page, like ink on paper."));
+  saveBar.append(el("h3", {}, "Save"), opts,
+    cta(label, () => runJob("Saving", () => perFile(suffix, (doc) => { const n = editor.api.apply(doc, { flatten: o.flatten, author: o.author }); if (!n) throw new Error(mode === "forms" ? "Nothing was filled in yet." : "Nothing has been added yet. Use the tools above the page first."); }))));
+}
 
 // Route last, once every tool is defined, so deep links like #merge work on a cold load.
 route();
