@@ -27,6 +27,9 @@ COMMANDS
   info     <in.pdf>                       Show pages, encryption, metadata
   merge    <out.pdf> <in.pdf>...          Merge files in order
   images   <out.pdf> <image>...           One page per JPEG/PNG [--size a4] [--margin 36] [--dpi 150]
+  extract-images <in.pdf> [--out-dir D] [--pages all]   Save the images as JPEG/PNG files
+  nup      <in.pdf> <out.pdf> [--per-sheet 2] [--sheet letter] [--portrait] [--margin 18] [--frames]
+  booklet  <in.pdf> <out.pdf> [--sheet letter] [--margin 18]
   split    <in.pdf> --every N | --ranges \"1-3\" \"4-\"   [--out-dir D] [--name T]
   pages    <in.pdf> <out.pdf> --select \"1-3,7\" | --delete \"2,4\"
   rotate   <in.pdf> <out.pdf> --degrees 90 [--pages odd]
@@ -180,6 +183,9 @@ fn run(argv: &[String]) -> Result<(), String> {
         "info" => info(&args),
         "merge" => merge(&args),
         "images" => images_cmd(&args),
+        "extract-images" => extract_images_cmd(&args),
+        "nup" => nup_cmd(&args),
+        "booklet" => booklet_cmd(&args),
         "split" => split(&args),
         "pages" => pages(&args),
         "rotate" => rotate(&args),
@@ -363,6 +369,56 @@ fn images_cmd(args: &Args) -> Result<(), String> {
             .map_err(|e| format!("{path}: {e}"))?;
     }
     write(&mut doc, out, &save_opts(args)?)
+}
+
+fn impose_opts(args: &Args) -> Result<foliopdf::impose::ImposeOptions, String> {
+    Ok(foliopdf::impose::ImposeOptions {
+        sheet: args.flag("sheet").unwrap_or("letter").to_string(),
+        landscape: !args.has("portrait"),
+        margin: args.num("margin", 18.0)?,
+        frames: args.has("frames"),
+    })
+}
+
+fn nup_cmd(args: &Args) -> Result<(), String> {
+    let (input, out) = (args.pos(1, "input file")?, args.pos(2, "output file")?);
+    let mut doc = load(args, input)?;
+    let per: usize = args.num("per-sheet", 2usize)?;
+    foliopdf::impose::nup(&mut doc, per, &impose_opts(args)?).map_err(|e| e.to_string())?;
+    write(&mut doc, out, &save_opts(args)?)
+}
+
+fn booklet_cmd(args: &Args) -> Result<(), String> {
+    let (input, out) = (args.pos(1, "input file")?, args.pos(2, "output file")?);
+    let mut doc = load(args, input)?;
+    foliopdf::impose::booklet(&mut doc, &impose_opts(args)?).map_err(|e| e.to_string())?;
+    write(&mut doc, out, &save_opts(args)?)
+}
+
+fn extract_images_cmd(args: &Args) -> Result<(), String> {
+    let input = args.pos(1, "input file")?;
+    let doc = load(args, input)?;
+    let idx = range(args, &doc, "pages")?;
+    let dir = PathBuf::from(args.flag("out-dir").unwrap_or("."));
+    std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let stem = Path::new(input)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("image")
+        .to_string();
+    let list = foliopdf::extract::extract_images(&doc, &idx).map_err(|e| e.to_string())?;
+    for (k, im) in list.iter().enumerate() {
+        let name = format!(
+            "{stem}-p{}-{}.{}",
+            im.page + 1,
+            k + 1,
+            if im.format == "jpeg" { "jpg" } else { "png" }
+        );
+        std::fs::write(dir.join(&name), &im.data).map_err(|e| format!("{name}: {e}"))?;
+        println!("{name}  {}x{}", im.width, im.height);
+    }
+    eprintln!("folio: {} image(s)", list.len());
+    Ok(())
 }
 
 fn split(args: &Args) -> Result<(), String> {

@@ -37,6 +37,7 @@
 //! * [`redact`] – remove text, graphics and image pixels under an area.
 //! * [`compress`] – downsample and re-encode images for much smaller files.
 //! * [`outline`] – read and write bookmarks.
+//! * [`impose`] – N-up sheets and booklets; [`extract`] – images out.
 //! * [`batch`] – run a JSON-described pipeline over many files; store and
 //!   reuse export presets.
 //! * [`object`] – the low-level object model when you need full control.
@@ -63,6 +64,7 @@ pub mod crypto;
 pub mod cstream;
 pub mod document;
 pub mod error;
+pub mod extract;
 pub mod filters;
 pub mod font;
 pub mod forms;
@@ -70,6 +72,7 @@ pub mod geometry;
 pub mod glyphlist;
 pub mod image;
 pub mod imgcodec;
+pub mod impose;
 pub mod lexer;
 pub mod object;
 pub mod ops;

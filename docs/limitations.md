@@ -17,7 +17,9 @@ when you need one of these.
 - **Redaction of images** in JPEG 2000, CCITT fax or JBIG2 encoding blanks
   the whole image (the codecs are not decoded); everything else is blanked
   pixel by pixel. Vector paths that only cross a redaction area are kept.
-- **OCR.** Scanned pages have no text to extract, search or redact by text.
+- **OCR in the engine.** The Rust crate does no recognition; the web app's
+  OCR tool uses Tesseract.js in the browser and stores the result with
+  `add_text_layer`.
 - **Named destinations and article threads** are not copied across
   `import_pages`/merge (bookmarks are, with their targets resolved).
 - **Cryptographic digital signatures.** Existing signatures are invalidated

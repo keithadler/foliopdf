@@ -102,6 +102,17 @@ doc.removeField("email");
 The web app's Fill & Sign, Fill a form and Comment tools are built on
 exactly these calls (see `examples/web/editor.js`).
 
+## Sheets, booklets, images out, OCR text in
+
+```ts
+doc.nup(2, { sheet: "letter" });                    // or doc.booklet({ sheet: "a4" })
+const images = doc.extractImages(null);            // [{ page, width, height, format, data }]
+doc.addTextLayer(0, words);                        // [{ text, rect }] from OCR, screen coordinates
+```
+
+The web app's OCR tool renders each page with pdf.js, runs Tesseract.js in
+the browser, and hands the words to `addTextLayer`.
+
 ## Crop and bookmarks
 
 ```ts

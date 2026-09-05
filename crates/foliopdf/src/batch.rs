@@ -28,6 +28,7 @@ use crate::compress::ImageOptions;
 use crate::crypto::EncryptionOptions;
 use crate::document::{Document, LoadOptions, Metadata, SaveOptions};
 use crate::error::{Error, Result};
+use crate::impose::ImposeOptions;
 use crate::ops::{self, FitMode, ImageStamp, PageNumbers, TextStamp};
 use crate::page::PageSize;
 
@@ -152,6 +153,29 @@ pub enum Step {
         /// Settings; omitted fields use the defaults (150 dpi, quality 75).
         #[serde(flatten)]
         options: ImageOptions,
+    },
+    /// Paint form fields and/or annotations into the pages and remove them.
+    Flatten {
+        /// Include form fields. Default true.
+        #[serde(default)]
+        forms: Option<bool>,
+        /// Include comments and other annotations. Default true.
+        #[serde(default)]
+        annotations: Option<bool>,
+    },
+    /// Put 2 or 4 pages on each sheet.
+    Nup {
+        /// 2 or 4.
+        per_sheet: usize,
+        /// Sheet settings.
+        #[serde(flatten)]
+        options: ImposeOptions,
+    },
+    /// Reorder into a printable, foldable booklet (2-up).
+    Booklet {
+        /// Sheet settings.
+        #[serde(flatten)]
+        options: ImposeOptions,
     },
     /// Split into several documents. Must be the last step.
     Split {
@@ -313,6 +337,12 @@ impl Preset {
                 {
                     return Err(Error::Preset(format!(
                         "step {}: quality must be 1–100 and maxDpi positive",
+                        i + 1
+                    )));
+                }
+                Step::Nup { per_sheet, .. } if *per_sheet != 2 && *per_sheet != 4 => {
+                    return Err(Error::Preset(format!(
+                        "step {}: perSheet must be 2 or 4",
                         i + 1
                     )));
                 }
@@ -628,6 +658,27 @@ fn process(
             Step::CompressImages { options } => {
                 crate::compress::compress_images(&mut doc, options)?;
             }
+            Step::Flatten { forms, annotations } => {
+                let (f, a) = (forms.unwrap_or(true), annotations.unwrap_or(true));
+                let pages: Vec<usize> = (0..doc.page_count()).collect();
+                let opts = crate::annot::FlattenOptions {
+                    widgets: Some(f),
+                    subtypes: if f && !a {
+                        Some(vec!["Widget".into()])
+                    } else {
+                        None
+                    },
+                    ..Default::default()
+                };
+                if f || a {
+                    crate::annot::flatten_annotations(&mut doc, &pages, &opts)?;
+                }
+                if f {
+                    crate::forms::remove_form(&mut doc);
+                }
+            }
+            Step::Nup { per_sheet, options } => crate::impose::nup(&mut doc, *per_sheet, options)?,
+            Step::Booklet { options } => crate::impose::booklet(&mut doc, options)?,
             Step::BlankPages { at, count, size } => {
                 let n = doc.page_count();
                 let at = match at {

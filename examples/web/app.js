@@ -5,6 +5,26 @@ import { createEditor } from "./editor.js?v=dev";
 export { PdfDocument, runBatch, PresetStore, parsePageRanges };
 
 // ---------------------------------------------------------------- helpers
+let ocrFile = "", ocrPage = 0;
+let tessPromise = null;
+/** Tesseract.js (Apache-2.0) is fetched on first use; the engine itself never depends on it. */
+function loadTesseract() {
+  if (!tessPromise) tessPromise = import("https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.esm.min.js").then((m) => m.default || m).catch((e) => { tessPromise = null; throw new Error("The text recognition engine couldn't be downloaded. Check your connection once; after that it works offline. (" + (e.message || e) + ")"); });
+  return tessPromise;
+}
+/** Word-level diff: [["=", text] | ["-", text] | ["+", text]] using an LCS over words. */
+export function wordDiff(a, b) {
+  const A = a.split(/\s+/).filter(Boolean), B = b.split(/\s+/).filter(Boolean);
+  const n = A.length, m = B.length;
+  if (n * m > 4_000_000) return [["-", A.join(" ")], ["+", B.join(" ")]];
+  const L = new Uint32Array((n + 1) * (m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i * (m + 1) + j] = A[i] === B[j] ? L[(i + 1) * (m + 1) + j + 1] + 1 : Math.max(L[(i + 1) * (m + 1) + j], L[i * (m + 1) + j + 1]);
+  const out = []; let i = 0, j = 0;
+  const push = (k, t) => { const last = out[out.length - 1]; if (last && last[0] === k) last[1] += " " + t; else out.push([k, t]); };
+  while (i < n && j < m) { if (A[i] === B[j]) { push("=", A[i]); i++; j++; } else if (L[(i + 1) * (m + 1) + j] >= L[i * (m + 1) + j + 1]) { push("-", A[i]); i++; } else { push("+", B[j]); j++; } }
+  while (i < n) { push("-", A[i++]); } while (j < m) { push("+", B[j++]); }
+  return out;
+}
 // Minimal ZIP writer (no compression): images are already compressed.
 const CRC_TABLE = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
 function crc32(b) { let c = 0xffffffff; for (let i = 0; i < b.length; i++) c = CRC_TABLE[(c ^ b[i]) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; }
@@ -76,6 +96,7 @@ function pref(id, defaults) {
 // ---------------------------------------------------------------- tools
 const TOOLS = [
   // Ordered by how often people reach for each tool; Fill & Sign first.
+  // (New tools are slotted in below by the ORDER list.)
   { id: "sign",      ico: "✍️", name: "Fill & Sign",       desc: "Type on any PDF, tick boxes, add the date, and draw or type your signature." },
   { id: "merge",     ico: "🧩", name: "Merge PDFs",        desc: "Combine several files into one, in the order you choose.", multi: true },
   { id: "compress",  ico: "🗜️", name: "Compress PDF",      desc: "Make files smaller. Keep images as they are, or shrink scans and photos too.", multi: true },
@@ -98,7 +119,16 @@ const TOOLS = [
   { id: "bookmarks", ico: "🔖", name: "Bookmarks",         desc: "Add, edit and remove the bookmarks readers see in the sidebar." },
   { id: "info",      ico: "📝", name: "Edit document info", desc: "Change the title, author and keywords, or wipe hidden metadata.", multi: true },
   { id: "batch",     ico: "⚙️", name: "Batch & presets",   desc: "Save a set of steps and run it on many files at once.", multi: true },
+  { id: "ocr",       ico: "🔎", name: "OCR: make searchable", desc: "Recognise the text in scanned pages so you can search, copy and redact it.", multi: true },
+  { id: "compare",   ico: "⚖️", name: "Compare PDFs",       desc: "See what changed between two versions of a document.", multi: true },
+  { id: "extractimages", ico: "🧲", name: "Extract images",  desc: "Save every picture in a PDF as a JPEG or PNG file." },
+  { id: "headers",   ico: "🧾", name: "Headers & footers",  desc: "Add a title, date or Bates numbers to the top or bottom of every page.", multi: true },
+  { id: "booklet",   ico: "📖", name: "Booklet & N-up",     desc: "Print two or four pages per sheet, or fold a booklet.", multi: true },
+  { id: "flatten",   ico: "🧊", name: "Flatten",            desc: "Make form fields and comments a permanent part of the page.", multi: true },
+  { id: "repair",    ico: "🩹", name: "Repair PDF",         desc: "Rebuild a damaged file that other apps refuse to open.", multi: true },
 ];
+const ORDER = ["sign", "merge", "compress", "forms", "split", "images", "toimages", "ocr", "protect", "unlock", "rotate", "organize", "delete", "annotate", "extract", "compare", "watermark", "headers", "numbers", "redact", "crop", "booklet", "flatten", "extractimages", "bookmarks", "resize", "repair", "info", "batch"];
+TOOLS.sort((a, b) => ORDER.indexOf(a.id) - ORDER.indexOf(b.id));
 
 let current = null;
 let files = [];      // {file, bytes, doc, pages, err, needsPw, pw, enc, repaired}
@@ -746,6 +776,137 @@ const STAGES = {
         if (items.length === 1) return [{ name: items[0].name, data: items[0].data, pages: 1, mime: o.format === "png" ? "image/png" : "image/jpeg", note: "1 image" }];
         return [{ name: `${stem(f.file.name)}-pages.zip`, data: zip(items), pages: items.length, mime: "application/zip", note: `${plural(items.length, "image")} in a ZIP file` }];
       })));
+  },
+  flatten() {
+    put(dropzone(), fileList(), summaryLine());
+    if (!ready().length) return;
+    const o = pref("flatten", { forms: true, comments: true });
+    put(el("div", { class: "panel" }, el("h3", {}, "What to flatten"), el("div", { class: "row" }, check("Form fields (filled values become plain text)", o.forms, (v) => (o.forms = v)), check("Comments, highlights, stamps and signatures", o.comments, (v) => (o.comments = v))),
+      el("p", { class: "summary", style: "margin:12px 0 0" }, "Flattened content looks the same but can no longer be edited, moved or removed by anyone. Links are kept.")),
+      cta("Flatten", () => runJob("Flattening", () => { if (!o.forms && !o.comments) throw new Error("Choose at least one thing to flatten."); return perFile("-flattened", (doc, f, out) => { let n = 0; if (o.forms && o.comments) n = doc.flattenAnnotations(null, {}); else if (o.forms) n = doc.flattenAnnotations(null, { subtypes: ["Widget"] }); else n = doc.flattenAnnotations(null, { widgets: false }); if (o.forms) doc.flattenFields(); out.note = n ? `${plural(n, "item")} flattened.` : "Nothing to flatten in this file."; }); })));
+  },
+  repair() {
+    put(dropzone(), fileList(), summaryLine());
+    if (!ready().length) return;
+    const damaged = ready().filter((f) => f.repaired).length;
+    put(notice(damaged ? "ok" : "warn", damaged ? `${damaged === 1 ? "This file was" : damaged + " files were"} damaged and ${damaged === 1 ? "has" : "have"} been rebuilt in memory. Save to get a clean copy.` : "These files opened cleanly. Saving still rewrites them from scratch: one tidy cross-reference table, no leftovers from old edits, which fixes many files other apps complain about."),
+      cta("Save repaired copy", () => runJob("Rebuilding", () => perFile("-repaired", (doc, f, out) => { out.note = f.repaired ? "Cross-reference table was missing or wrong; rebuilt by scanning the file." : "Rewritten cleanly."; }, { compress: true }))));
+  },
+  extractimages() {
+    put(dropzone(), fileList());
+    const f = ready()[0]; if (!f) return;
+    const o = pref("extractimages", { which: "all", custom: "" });
+    const pgs = el("div", { class: "row" }, field("Which pages", segmented([["all", "All pages"], ["custom", "Specific pages"]], o.which, (v) => { o.which = v; renderStage(); }, "Which pages")));
+    let grid = null;
+    if (o.which === "custom") { const rf = rangeField("Pages", o.custom, f.pages, (v) => (o.custom = v)); pgs.append(rf); grid = pageGrid(f, rf.querySelector("input"), null); }
+    put(el("div", { class: "panel" }, el("h3", {}, "Options"), pgs, grid, el("p", { class: "summary", style: "margin:12px 0 0" }, "Photos come out as the original JPEGs; other images as PNG. Each image is saved once even if it appears on several pages.")),
+      cta("Extract images", () => runJob("Extracting", async () => {
+        if (o.which === "custom" && !o.custom.trim()) throw new Error("Type which pages to look at, like 1, 3-5.");
+        const list = f.doc.extractImages(o.which === "all" ? null : o.custom);
+        if (!list.length) throw new Error("No images were found on those pages. Vector drawings and text aren't images.");
+        const items = list.map((im, i) => ({ name: `${stem(f.file.name)}-p${im.page + 1}-${i + 1}.${im.format === "jpeg" ? "jpg" : "png"}`, data: im.data }));
+        if (items.length === 1) return [{ name: items[0].name, data: items[0].data, pages: 1, mime: list[0].format === "jpeg" ? "image/jpeg" : "image/png", note: `${list[0].width} × ${list[0].height} px` }];
+        return [{ name: `${stem(f.file.name)}-images.zip`, data: zip(items), pages: items.length, mime: "application/zip", note: `${plural(items.length, "image")} in a ZIP file` }];
+      })));
+  },
+  headers() {
+    put(dropzone(), fileList(), summaryLine());
+    if (!ready().length) return;
+    const o = pref("headers", { hl: "", hc: "", hr: "", fl: "", fc: "{page} / {pages}", fr: "", size: 9, start: 1, which: "all", custom: "" });
+    const single = ready().length === 1 ? ready()[0] : null;
+    const inp = (k, ph) => el("input", { type: "text", value: o[k], placeholder: ph, spellcheck: "false", oninput: (e) => (o[k] = e.target.value) });
+    const rowOf = (label, a, b, c) => el("div", { class: "row" }, field(label + " left", inp(a, "")), field(label + " centre", inp(b, "")), field(label + " right", inp(c, "")));
+    const pgs = el("div", { class: "row" }, field("Which pages", segmented([["all", "All pages"], ["skipfirst", "All except the first"], ["custom", "Specific pages"]], o.which, (v) => { o.which = v; renderStage(); }, "Which pages")));
+    let grid = null;
+    if (o.which === "custom") { const rf = rangeField("Pages", o.custom, single ? single.pages : 0, (v) => (o.custom = v)); pgs.append(rf); if (single) grid = pageGrid(single, rf.querySelector("input"), null); }
+    put(el("div", { class: "panel" }, el("h3", {}, "Header"), rowOf("Header", "hl", "hc", "hr"), el("h3", { style: "margin-top:16px" }, "Footer"), rowOf("Footer", "fl", "fc", "fr"),
+      el("p", { class: "summary", style: "margin:10px 0 0" }, "Placeholders: {page}, {pages}, {page:6} for zero-padded numbers, {date}, {title}, {file}. Bates numbering example: ", el("code", {}, "ACME{page:6}"), "."),
+      el("div", { class: "row", style: "margin-top:12px" }, el("button", { class: "btn small", onclick: () => { o.fr = "BATES{page:6}"; o.fc = ""; renderStage(); } }, "Use Bates numbering"), el("button", { class: "btn small", onclick: () => { o.hl = "{title}"; o.hr = "{date}"; o.fc = "Page {page} of {pages}"; renderStage(); } }, "Title, date and page numbers"), el("button", { class: "btn small", onclick: () => { for (const k of ["hl", "hc", "hr", "fl", "fc", "fr"]) o[k] = ""; renderStage(); } }, "Clear")),
+      el("div", { class: "row", style: "margin-top:12px" }, field("Text size", el("input", { type: "number", min: 6, max: 24, value: o.size, oninput: (e) => (o.size = Math.min(24, Math.max(6, +e.target.value || 9))) })), field("First page number", el("input", { type: "number", min: 0, value: o.start, oninput: (e) => (o.start = Math.max(0, +e.target.value || 0)) }))), pgs, grid),
+      cta("Add headers & footers", () => runJob("Stamping", () => perFile("-headers", (doc, f) => {
+        const n = doc.pageCount();
+        const spec = o.which === "all" ? null : o.which === "skipfirst" ? (n > 1 ? "2-" : null) : o.custom;
+        if (o.which === "custom" && !o.custom.trim()) throw new Error("Type which pages, like 2-.");
+        if (o.which === "skipfirst" && n === 1) return false;
+        const today = new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+        const title = (doc.metadata().title || stem(f.file.name)).trim();
+        const fill = (t) => t.replace(/\{date\}/g, today).replace(/\{title\}/g, title).replace(/\{file\}/g, f.file.name);
+        const slots = [["hl", "top-left"], ["hc", "top-center"], ["hr", "top-right"], ["fl", "bottom-left"], ["fc", "bottom-center"], ["fr", "bottom-right"]];
+        let any = false;
+        for (const [k, pos] of slots) { const t = fill(o[k].trim()); if (!t) continue; any = true; doc.addPageNumbers(spec, { format: t, position: pos, size: o.size, startAt: o.start, margin: 24 }); }
+        if (!any) throw new Error("Type something in at least one header or footer box.");
+      }))));
+  },
+  booklet() {
+    put(dropzone(), fileList(), summaryLine());
+    if (!ready().length) return;
+    const o = pref("booklet", { mode: "booklet", sheet: "letter", landscape: true, frames: false, margin: 18 });
+    put(el("div", { class: "panel" }, el("h3", {}, "Layout"), el("div", { class: "row" }, field("Arrange", segmented([["booklet", "Booklet (fold in half)"], [2, "2 pages per sheet"], [4, "4 pages per sheet"]], o.mode, (v) => { o.mode = v; renderStage(); }, "Layout"), o.mode === "booklet" ? "Print double-sided, flip on the short edge, fold the stack in half. Page count is padded to a multiple of four." : "Pages are placed in reading order, left to right, top to bottom.")),
+      el("div", { class: "row" }, field("Sheet", segmented([["letter", "Letter"], ["a4", "A4"], ["legal", "Legal"], ["tabloid", "Tabloid"]], o.sheet, (v) => (o.sheet = v), "Sheet size")), o.mode === "booklet" ? null : field("Orientation", segmented([[true, "Landscape"], [false, "Portrait"]], o.landscape, (v) => (o.landscape = v), "Orientation")), field("Margin", segmented([[0, "None"], [18, "¼ inch"], [36, "½ inch"]], o.margin, (v) => (o.margin = v), "Margin"))),
+      el("div", { class: "row" }, check("Draw a thin frame around each page", o.frames, (v) => (o.frames = v)))),
+      cta(o.mode === "booklet" ? "Make booklet" : `Make ${o.mode}-up sheets`, () => runJob("Arranging", () => perFile(o.mode === "booklet" ? "-booklet" : `-${o.mode}up`, (doc) => { const opts = { sheet: o.sheet, landscape: o.mode === "booklet" ? true : o.landscape, margin: o.margin, frames: o.frames }; if (o.mode === "booklet") doc.booklet(opts); else doc.nup(+o.mode, opts); }))));
+  },
+  ocr() {
+    put(dropzone(), fileList(), summaryLine());
+    if (!ready().length) return;
+    const o = pref("ocr", { lang: "eng", onlyEmpty: true, dpi: 300 });
+    const LANGS = [["eng", "English"], ["spa", "Spanish"], ["fra", "French"], ["deu", "German"], ["por", "Portuguese"], ["ita", "Italian"], ["nld", "Dutch"], ["pol", "Polish"], ["swe", "Swedish"], ["tur", "Turkish"], ["rus", "Russian"], ["jpn", "Japanese"], ["chi_sim", "Chinese (simplified)"], ["kor", "Korean"], ["ara", "Arabic"], ["hin", "Hindi"]];
+    const sel = el("select", { "aria-label": "Language", onchange: (e) => (o.lang = e.target.value) }); for (const [v, l] of LANGS) sel.append(el("option", { value: v, selected: v === o.lang }, l));
+    put(el("div", { class: "panel" }, el("h3", {}, "Options"), el("div", { class: "row" }, field("Language of the text", sel), field("Detail", segmented([[200, "Faster (200 dpi)"], [300, "Better (300 dpi)"]], o.dpi, (v) => (o.dpi = v), "Detail"))),
+      el("div", { class: "row" }, check("Skip pages that already contain text", o.onlyEmpty, (v) => (o.onlyEmpty = v))),
+      el("p", { class: "summary", style: "margin:12px 0 0" }, "The recognised words are added as an invisible layer under the scan, exactly where they appear, so search, copy, extract and redact by text all work. The page image is not changed. Recognition runs in your browser with Tesseract; the first use downloads its engine and language pack (a few MB), after which it works offline.")),
+      cta("Recognise text", () => runJob("Recognising text", async () => {
+        const tess = await loadTesseract();
+        const { openPdf } = await import("./thumbs.js?v=dev");
+        const worker = await tess.createWorker(o.lang, 1, { logger: (m) => { if (m.status === "recognizing text" && progressEl) progressEl.text.textContent = `${ocrFile} · page ${ocrPage}: ${Math.round(m.progress * 100)}%`; } });
+        try {
+          const outs = []; const list = ready(); let k = 0;
+          for (const f of list) {
+            setProgress(++k, list.length, f.file.name); ocrFile = f.file.name;
+            const doc = f.pw ? PdfDocument.loadWithPassword(f.bytes, f.pw) : PdfDocument.load(f.bytes);
+            const pdf = await openPdf(f.bytes, f.pw); if (!pdf) { doc.free(); throw new Error(`${f.file.name} couldn't be rendered.`); }
+            let done = 0, skipped = 0, words = 0;
+            try {
+              for (let p = 0; p < f.pages; p++) {
+                ocrPage = p + 1; if (progressEl) progressEl.text.textContent = `${f.file.name} · page ${p + 1} of ${f.pages}`;
+                if (o.onlyEmpty && doc.pageText(p).trim().length > 20) { skipped++; continue; }
+                const page = await pdf.getPage(p + 1); const scale = o.dpi / 72; const vp = page.getViewport({ scale });
+                const cv = el("canvas", { width: Math.ceil(vp.width), height: Math.ceil(vp.height) });
+                await page.render({ canvasContext: cv.getContext("2d", { alpha: false }), viewport: vp, background: "#ffffff", annotationMode: 0 }).promise; page.cleanup();
+                const r = await worker.recognize(cv);
+                const ws = (r.data.words || []).filter((w) => w.text && w.text.trim() && w.confidence > 30).map((w) => ({ text: w.text, rect: { x0: w.bbox.x0 / scale, y0: w.bbox.y0 / scale, x1: w.bbox.x1 / scale, y1: w.bbox.y1 / scale } }));
+                if (ws.length) { words += doc.addTextLayer(p, ws); done++; }
+                await sleep(0);
+              }
+              outs.push({ name: `${stem(f.file.name)}-searchable.pdf`, data: doc.save({}), pages: f.pages, note: `${plural(words, "word")} recognised on ${plural(done, "page")}${skipped ? `; ${skipped} already had text` : ""}.` });
+            } finally { doc.free(); try { pdf.loadingTask?.destroy?.(); } catch {} }
+          }
+          return outs;
+        } finally { await worker.terminate(); }
+      })));
+  },
+  compare() {
+    put(dropzone(), fileList({ reorder: true }));
+    const list = ready();
+    if (list.length < 2) { if (files.length) put(el("p", { class: "summary" }, "Add the two versions to compare: the older one first.")); return; }
+    const [a, b] = list;
+    put(el("p", { class: "summary" }, `Comparing ${a.file.name} (older) with ${b.file.name} (newer), page by page. Drag to swap them.`));
+    const host = el("div", { class: "panel" }, el("h3", {}, "Differences in the text"));
+    const pages = Math.max(a.pages, b.pages); let changed = 0;
+    for (let p = 0; p < pages; p++) {
+      const ta = p < a.pages ? a.doc.pageText(p) : "", tb = p < b.pages ? b.doc.pageText(p) : "";
+      if (ta === tb) continue;
+      changed++;
+      const d = wordDiff(ta, tb);
+      const view = el("div", { class: "diff" });
+      for (const [kind, text] of d) view.append(el(kind === "=" ? "span" : kind === "-" ? "del" : "ins", {}, text + " "));
+      const summary = d.filter((x) => x[0] !== "=").length;
+      host.append(el("details", { class: "diffpage", open: changed <= 3 }, el("summary", {}, `Page ${p + 1}: ${plural(d.filter((x) => x[0] === "-").length, "deletion")}, ${plural(d.filter((x) => x[0] === "+").length, "addition")}${p >= a.pages ? " (new page)" : p >= b.pages ? " (page removed)" : ""}`), view));
+      void summary;
+    }
+    if (!changed) host.append(notice("ok", "The text of every page is identical. Differences in images, colours or layout are not detected."));
+    else host.prepend(el("p", { class: "summary" }, `${plural(changed, "page")} differ${changed === 1 ? "s" : ""} out of ${pages}. Removed words are struck through in red, added words are green. Images and layout are not compared.`));
+    put(host);
   },
   sign() { editorStage("sign", "fill", "-signed", "Sign & save"); },
   redact() { editorStage("redact", "redact", "-redacted", "Apply redactions"); },

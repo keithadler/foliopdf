@@ -18,6 +18,9 @@ const STEP_TYPES = [
   ["metadata", "Document info", "Set title, author, subject, keywords."],
   ["strip-metadata", "Wipe hidden metadata", "Remove XMP, info and thumbnails."],
   ["compress-images", "Shrink images", "Downsample and re-encode pictures and scans (lossy)."],
+  ["flatten", "Flatten", "Burn form fields and comments into the pages."],
+  ["nup", "N-up", "2 or 4 pages per sheet."],
+  ["booklet", "Booklet", "Fold-in-half order, 2-up."],
   ["split", "Split into files", "Must be the last step."],
 ];
 const DEFAULTS = {
@@ -34,6 +37,9 @@ const DEFAULTS = {
   metadata: () => ({ op: "metadata" }),
   "strip-metadata": () => ({ op: "strip-metadata" }),
   "compress-images": () => ({ op: "compress-images", maxDpi: 150, quality: 75 }),
+  flatten: () => ({ op: "flatten" }),
+  nup: () => ({ op: "nup", perSheet: 2, sheet: "letter" }),
+  booklet: () => ({ op: "booklet", sheet: "letter" }),
   split: () => ({ op: "split", every: 1 }),
 };
 const state = { store: null, name: null, preset: null, showJson: false, image: null, imageName: "" };
@@ -133,6 +139,9 @@ function stepCard(st, i, p) {
     case "page-numbers": body.append(el("div", { class: "row" }, field("Style", segmented([["{page}", "1"], ["{page} / {pages}", "1 / 12"], ["Page {page} of {pages}", "Page 1 of 12"], ["- {page} -", "- 1 -"]], st.format || "{page} / {pages}", (v) => (st.format = v), "Style")), field("Position", anchorPicker(st.position || "bottom-center", (v) => (st.position = v))), field("Size", el("input", { type: "number", min: 6, max: 36, value: st.size ?? 10, oninput: (e) => (st.size = +e.target.value || 10) })), field("First number", el("input", { type: "number", min: 0, value: st.startAt ?? 1, oninput: (e) => (st.startAt = +e.target.value || 0) })), pagesField())); break;
     case "metadata": { const f = (k, l) => field(l, el("input", { type: "text", value: st[k] || "", placeholder: "leave blank to keep", oninput: (e) => { if (e.target.value === "") delete st[k]; else st[k] = e.target.value; } })); body.append(el("div", { class: "row" }, f("title", "Title"), f("author", "Author")), el("div", { class: "row" }, f("subject", "Subject"), f("keywords", "Keywords")), el("p", { class: "summary", style: "margin:8px 0 0" }, "Blank fields are left unchanged. To erase a field, use “Wipe hidden metadata” first.")); break; }
     case "compress-images": body.append(el("div", { class: "row" }, field("Resolution", segmented([[300, "300 dpi"], [150, "150 dpi"], [96, "96 dpi"]], st.maxDpi ?? 150, (v) => (st.maxDpi = v), "Resolution"), "Images shown at more than this are scaled down."), field("JPEG quality", el("input", { type: "number", min: 1, max: 100, value: st.quality ?? 75, oninput: (e) => (st.quality = Math.min(100, Math.max(1, +e.target.value || 75)) ) })))); break;
+    case "flatten": body.append(el("div", { class: "row" }, check("Form fields", st.forms !== false, (v) => (st.forms = v)), check("Comments and annotations", st.annotations !== false, (v) => (st.annotations = v)))); break;
+    case "nup": body.append(el("div", { class: "row" }, field("Per sheet", segmented([[2, "2"], [4, "4"]], st.perSheet ?? 2, (v) => (st.perSheet = v), "Per sheet")), field("Sheet", segmented([["letter", "Letter"], ["a4", "A4"]], st.sheet || "letter", (v) => (st.sheet = v), "Sheet")), check("Landscape", st.landscape !== false, (v) => (st.landscape = v)))); break;
+    case "booklet": body.append(el("div", { class: "row" }, field("Sheet", segmented([["letter", "Letter"], ["a4", "A4"]], st.sheet || "letter", (v) => (st.sheet = v), "Sheet")))); break;
     case "strip-metadata": body.append(el("p", { class: "summary", style: "margin:0" }, "Removes XMP metadata, the info dictionary and page thumbnails.")); break;
     case "split": { const mode = st.ranges ? "ranges" : "every"; body.append(el("div", { class: "row" }, field("How", segmented([["every", "Every N pages"], ["ranges", "Custom ranges"]], mode, (v) => { if (v === "every") { delete st.ranges; st.every = 1; } else { delete st.every; st.ranges = ["1-"]; } renderStage(); }, "Split mode")), mode === "every" ? field("Pages per file", el("input", { type: "number", min: 1, value: st.every ?? 1, oninput: (e) => (st.every = Math.max(1, +e.target.value || 1)) })) : field("Ranges, one per file, separated by commas", el("input", { type: "text", value: (st.ranges || []).join(", "), spellcheck: "false", oninput: (e) => (st.ranges = e.target.value.split(",").map((x) => x.trim()).filter(Boolean)) })))); break; }
   }

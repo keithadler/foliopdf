@@ -30,6 +30,20 @@ size at `--dpi`; with a named size the image is fitted inside (turned to
 landscape when it is wider than tall).
 
 ```
+folio extract-images <in.pdf> [--out-dir D] [--pages all]
+```
+Saves each image drawn on the pages as a JPEG (passed through) or PNG.
+
+```
+folio nup <in.pdf> <out.pdf> [--per-sheet 2|4] [--sheet letter] [--portrait] [--margin 18] [--frames]
+folio booklet <in.pdf> <out.pdf> [--sheet letter] [--margin 18]
+```
+`nup` puts 2 or 4 pages on each sheet in reading order. `booklet` orders
+pages so that printing double-sided (flip on the short edge) and folding
+the stack in half gives a book; the page count is padded to a multiple of
+four.
+
+```
 folio split <in.pdf> --every N              [--out-dir D] [--name "{stem}-{index}.pdf"]
 folio split <in.pdf> --ranges "1-3" "4-9" "10-"
 ```
@@ -160,6 +174,10 @@ folio flatten <in.pdf> <out.pdf> [--forms | --annots] [--pages all]
 ```
 Paints annotations into the page content and removes them. `--forms` does
 only form fields, `--annots` only comments and markup; the default does both.
+
+Page-number formats accept `{page:6}` for zero-padded numbers, so
+`folio numbers in.pdf out.pdf --format "ACME{page:6}" --position bottom-right`
+is Bates numbering.
 
 ```
 folio text <in.pdf> [--pages 1-3] [--out file.txt]

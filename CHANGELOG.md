@@ -6,6 +6,19 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- OCR in the web app (Tesseract.js, on-device): recognised words become an
+  invisible, searchable text layer (`ops::add_text_layer`, wasm
+  `addTextLayer`).
+- Compare two PDFs (word-level text diff per page) in the web app.
+- Extract images (`extract::extract_images`, CLI `extract-images`, wasm
+  `extractImages`, web tool) as JPEG/PNG.
+- Headers & footers tool with `{date}`, `{title}`, `{file}` and Bates
+  numbering; page-number formats accept `{page:6}` zero padding.
+- N-up sheets and booklet imposition (`impose` module, batch steps `nup`
+  and `booklet`, CLI `nup`/`booklet`, wasm `nup`/`booklet`, web tool).
+- Flatten and Repair web tools; batch step `flatten`.
+
 ## [0.2.0] - 2026-09-04
 
 The "no one needs Adobe" release: forms, signing, comments, redaction,

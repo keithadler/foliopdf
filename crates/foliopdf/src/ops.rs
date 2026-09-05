@@ -428,10 +428,7 @@ pub fn add_page_numbers(doc: &mut Document, pages: &[usize], settings: &PageNumb
     let total = all.len();
     for (k, &idx) in all.iter().enumerate() {
         let n = settings.start_at + k as i64;
-        let text = settings.format.replace("{page}", &n.to_string()).replace(
-            "{pages}",
-            &(settings.start_at + total as i64 - 1).to_string(),
-        );
+        let text = substitute(&settings.format, n, settings.start_at + total as i64 - 1);
         let stamp = TextStamp {
             text,
             font: settings.font.clone(),
@@ -446,6 +443,103 @@ pub fn add_page_numbers(doc: &mut Document, pages: &[usize], settings: &PageNumb
         stamp_text(doc, &[idx], &stamp)?;
     }
     Ok(())
+}
+
+/// Replaces `{page}`, `{pages}`, and zero-padded forms such as `{page:6}`
+/// (Bates numbering: `ACME{page:6}` gives `ACME000001`).
+pub fn substitute(format: &str, page: i64, pages: i64) -> String {
+    let mut out = String::with_capacity(format.len() + 8);
+    let mut rest = format;
+    while let Some(start) = rest.find('{') {
+        out.push_str(&rest[..start]);
+        let after = &rest[start + 1..];
+        match after.find('}') {
+            Some(end) => {
+                let token = &after[..end];
+                let (name, width) = match token.split_once(':') {
+                    Some((n, w)) => (n, w.trim().parse::<usize>().ok()),
+                    None => (token, None),
+                };
+                let value = match name.trim() {
+                    "page" => Some(page),
+                    "pages" => Some(pages),
+                    _ => None,
+                };
+                match value {
+                    Some(v) => match width {
+                        Some(w) if v >= 0 => out.push_str(&format!("{v:0w$}")),
+                        _ => out.push_str(&v.to_string()),
+                    },
+                    None => {
+                        out.push('{');
+                        out.push_str(token);
+                        out.push('}');
+                    }
+                }
+                rest = &after[end + 1..];
+            }
+            None => {
+                out.push_str(&rest[start..]);
+                rest = "";
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// A recognised word for [`add_text_layer`]: text plus its box in display
+/// space (points from the bottom-left of the page as shown).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Word {
+    /// The text.
+    pub text: String,
+    /// Bounding box.
+    pub rect: Rect,
+}
+
+/// Adds an invisible text layer (render mode 3) so a scanned page becomes
+/// searchable and selectable. Each word is scaled to its box, which is how
+/// OCR results are stored by scanners and Acrobat. Returns the words placed.
+pub fn add_text_layer(doc: &mut Document, page: usize, words: &[Word]) -> Result<usize> {
+    let info = doc.page_info(page)?;
+    let font_ref = doc.add_font(Font::standard(StandardFont::Helvetica));
+    let font_name = doc.add_page_resource(page, "Font", font_ref)?;
+    let mut cb = ContentBuilder::new();
+    cb.save()
+        .transform(&info.display_to_user())
+        .begin_text()
+        .text_render_mode(3)
+        .font(&font_name, 1.0);
+    let mut placed = 0;
+    for w in words {
+        let text = w.text.trim();
+        if text.is_empty() || !(w.rect.width() > 0.1 && w.rect.height() > 0.1) {
+            continue;
+        }
+        let (encoded, width1) = {
+            let f = doc.font_mut(font_ref).expect("font registered");
+            (f.encode(text), f.measure(text, 1.0))
+        };
+        if width1 <= 0.0 {
+            continue;
+        }
+        // Font size from the box height; horizontal scale to fill the width.
+        let size = w.rect.height() * 0.85;
+        let hscale = (w.rect.width() / (width1 * size)) * 100.0;
+        let baseline = w.rect.y0 + w.rect.height() * 0.2;
+        cb.text_matrix(&Matrix::new(size, 0.0, 0.0, size, w.rect.x0, baseline));
+        let mut raw = Vec::new();
+        crate::content::write_num(&mut raw, hscale.clamp(10.0, 1000.0));
+        raw.extend_from_slice(b" Tz");
+        cb.raw(&raw).show_literal(&encoded);
+        placed += 1;
+    }
+    cb.end_text().restore();
+    if placed > 0 {
+        doc.draw(page, &cb.finish())?;
+    }
+    Ok(placed)
 }
 
 /// Rotates the listed pages by `degrees` (multiple of 90).
@@ -904,6 +998,56 @@ mod tests {
             }
         )
         .is_err());
+    }
+
+    #[test]
+    fn substitution() {
+        assert_eq!(substitute("Page {page} of {pages}", 3, 12), "Page 3 of 12");
+        assert_eq!(substitute("ACME{page:6}", 7, 9), "ACME000007");
+        assert_eq!(substitute("{nope} {page", 1, 1), "{nope} {page");
+    }
+
+    #[test]
+    fn text_layer_is_searchable() {
+        use crate::Document;
+        let mut doc = Document::new();
+        doc.add_page(PageSize::LETTER);
+        let n = add_text_layer(
+            &mut doc,
+            0,
+            &[
+                Word {
+                    text: "Invoice".into(),
+                    rect: Rect::new(72.0, 700.0, 140.0, 716.0),
+                },
+                Word {
+                    text: "total".into(),
+                    rect: Rect::new(150.0, 700.0, 190.0, 716.0),
+                },
+            ],
+        )
+        .unwrap();
+        assert_eq!(n, 2);
+        let doc = Document::load(&doc.save(&Default::default()).unwrap()).unwrap();
+        assert_eq!(crate::text::page_text(&doc, 0).unwrap(), "Invoice total");
+        let m = crate::text::search(
+            &doc,
+            0,
+            "invoice total",
+            &crate::text::SearchOptions {
+                case_insensitive: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(m.len(), 1);
+        assert!(
+            (m[0].rects[0].x0 - 72.0).abs() < 0.5 && (m[0].rects[0].x1 - 190.0).abs() < 2.0,
+            "{:?}",
+            m[0].rects
+        );
+        // Invisible: render mode 3 in the content.
+        assert!(String::from_utf8_lossy(&doc.page_content(0).unwrap()).contains("3 Tr"));
     }
 
     #[test]

@@ -9,8 +9,10 @@ use foliopdf::annot::{self, Annotation, AnnotationMeta, FlattenOptions};
 use foliopdf::batch::{self, Asset, Input, Preset, PresetStore as CoreStore};
 use foliopdf::compress::{self, ImageOptions};
 use foliopdf::document::Metadata;
+use foliopdf::extract;
 use foliopdf::forms::{self, FieldValue, NewField};
 use foliopdf::geometry::{Point, Rect};
+use foliopdf::impose::{self, ImposeOptions};
 use foliopdf::ops::{self, FitMode, ImagePageOptions, ImageStamp, PageNumbers, TextStamp};
 use foliopdf::outline::{self, Bookmark};
 use foliopdf::redact::{self, RedactOptions};
@@ -254,6 +256,21 @@ export interface ImagePageOptions {
   margin?: number;
 }
 
+/** Sheet layout for `nup` and `booklet`. */
+export interface ImposeOptions {
+  /** "letter", "a4", ... Default "letter". */
+  sheet?: string;
+  /** Turn the sheet to landscape. Default true. */
+  landscape?: boolean;
+  /** Margin around each placed page in points. Default 18. */
+  margin?: number;
+  /** Thin frame around each page. Default false. */
+  frames?: boolean;
+}
+export interface ExtractedImage { page: number; width: number; height: number; format: "jpeg" | "png"; data: Uint8Array }
+/** A recognised word for `addTextLayer` (screen coordinates). */
+export interface OcrWord { text: string; rect: Rect }
+
 /** A bookmark (outline entry). */
 export interface Bookmark {
   title: string;
@@ -325,6 +342,12 @@ extern "C" {
     pub type ImagePageOptionsJs;
     #[wasm_bindgen(typescript_type = "Bookmark[]")]
     pub type BookmarkArrayJs;
+    #[wasm_bindgen(typescript_type = "ImposeOptions | undefined")]
+    pub type ImposeOptionsJs;
+    #[wasm_bindgen(typescript_type = "ExtractedImage[]")]
+    pub type ExtractedImageArrayJs;
+    #[wasm_bindgen(typescript_type = "OcrWord[]")]
+    pub type OcrWordArrayJs;
     #[wasm_bindgen(typescript_type = "Metadata")]
     pub type MetadataJs;
     #[wasm_bindgen(typescript_type = "PageInfo[]")]
@@ -933,6 +956,58 @@ impl PdfDocument {
     pub fn uncrop_pages(&mut self, pages: Option<String>) -> Result<(), JsError> {
         let idx = self.range(pages)?;
         ops::uncrop_pages(&mut self.inner, &idx).map_err(err)
+    }
+
+    /// Puts 2 or 4 pages on each sheet, replacing the pages.
+    pub fn nup(&mut self, per_sheet: usize, options: ImposeOptionsJs) -> Result<(), JsError> {
+        let o: ImposeOptions = from_js(options.into())?;
+        impose::nup(&mut self.inner, per_sheet, &o).map_err(err)
+    }
+
+    /// Reorders into a foldable booklet (2-up, double-sided, short-edge flip).
+    pub fn booklet(&mut self, options: ImposeOptionsJs) -> Result<(), JsError> {
+        let o: ImposeOptions = from_js(options.into())?;
+        impose::booklet(&mut self.inner, &o).map_err(err)
+    }
+
+    /// The images drawn on `pages` (null = all) as JPEG or PNG files.
+    #[wasm_bindgen(js_name = extractImages)]
+    pub fn extract_images(&self, pages: Option<String>) -> Result<ExtractedImageArrayJs, JsError> {
+        let idx = self.range(pages)?;
+        let list = extract::extract_images(&self.inner, &idx).map_err(err)?;
+        let arr = Array::new();
+        for im in list {
+            let o = Object::new();
+            Reflect::set(&o, &"page".into(), &(im.page as u32).into()).ok();
+            Reflect::set(&o, &"width".into(), &(im.width as u32).into()).ok();
+            Reflect::set(&o, &"height".into(), &(im.height as u32).into()).ok();
+            Reflect::set(&o, &"format".into(), &im.format.into()).ok();
+            Reflect::set(
+                &o,
+                &"data".into(),
+                &Uint8Array::from(im.data.as_slice()).into(),
+            )
+            .ok();
+            arr.push(&o.into());
+        }
+        Ok(JsValue::from(arr).unchecked_into())
+    }
+
+    /// Adds an invisible, searchable text layer (for OCR results). `words`
+    /// carry screen-coordinate boxes. Returns how many were placed.
+    #[wasm_bindgen(js_name = addTextLayer)]
+    pub fn add_text_layer(&mut self, page: usize, words: OcrWordArrayJs) -> Result<usize, JsError> {
+        let list: Vec<ops::Word> = serde_wasm_bindgen::from_value(words.into())
+            .map_err(|e| JsError::new(&format!("invalid words: {e}")))?;
+        let h = self.display_height(page)?;
+        let flipped: Vec<ops::Word> = list
+            .into_iter()
+            .map(|w| ops::Word {
+                text: w.text,
+                rect: flip_rect(&w.rect, h),
+            })
+            .collect();
+        ops::add_text_layer(&mut self.inner, page, &flipped).map_err(err)
     }
 
     fn display_height(&self, page: usize) -> Result<f64, JsError> {

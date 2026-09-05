@@ -7,7 +7,7 @@ annotate, merge, split, reorder, rotate, resize, stamp, compress and encrypt
 them, and write clean compact output. Runs in browsers, Node, Deno, Bun and
 natively on Linux, macOS and Windows.
 
-- **Web app**: [keithadler.github.io/foliopdf](https://keithadler.github.io/foliopdf/): fill & sign, fill forms, comment and mark up, redact, extract text, merge, split, compress, protect, organize, watermark and more, all in the browser, nothing uploaded.
+- **Web app**: [keithadler.github.io/foliopdf](https://keithadler.github.io/foliopdf/): fill & sign, fill forms, comment, redact, OCR scans, compare versions, extract text and images, merge, split, compress, protect, organize, booklets, headers and Bates numbers and more, all in the browser, nothing uploaded.
 - **Rust crate** `foliopdf`: the engine, no I/O, no `unsafe`.
 - **npm package** `foliopdf`: WebAssembly bindings with TypeScript types.
 - **CLI** `folio`: single binary for scripts and shells.
@@ -83,6 +83,8 @@ and the result has one clean cross-reference section.
 | Pages | insert, delete, reorder, duplicate, rotate, reverse, blank pages; resize to A4/Letter/any size or scale, with content and annotations scaled to match; import pages between documents with all their dependencies |
 | Merge and split | merge any number of files; split by page count or by ranges; page-range language `1-3,7,odd,last,r2`; bookmarks and form fields follow their pages |
 | Bookmarks and crop | read and write the outline tree (named destinations resolved); crop pages to an area |
+| Print layouts | 2-up and 4-up sheets, booklet imposition |
+| Images and OCR | images out as JPEG/PNG; invisible text layers from OCR words (the web app runs Tesseract in the browser) |
 | Forms | list fields (text, check box, radio, drop-down, list, signature), fill them with generated appearances, create and remove fields, flatten; fields survive merging and extraction |
 | Annotations | highlight, underline, strike-out, box, circle, line, ink, text box, sticky note, link, image stamp (signatures), each with an appearance stream; list, remove, flatten selectively |
 | Text | extract text with positions (simple and composite fonts, encodings, ToUnicode, form XObjects), words and lines in reading order, search with case and whole-word options |
@@ -92,8 +94,9 @@ and the result has one clean cross-reference section.
 | Compression | stream recompression, object streams, cross-reference streams, dedup of identical fonts and images, metadata stripping; optional lossy image downsampling and JPEG re-encoding for scans and photos |
 | Batch | JSON presets: merge-or-each modes, ordered steps, output naming templates, encryption; `PresetStore` for saving export configurations |
 
-Not in scope (yet): rendering pages to pixels, cryptographic digital
-signatures, OCR. See [docs/limitations.md](docs/limitations.md).
+Not in scope (yet): rendering pages to pixels in Rust, cryptographic
+digital signatures, OCR in Rust (the web app does it with Tesseract.js).
+See [docs/limitations.md](docs/limitations.md).
 
 ## Install
 

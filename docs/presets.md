@@ -53,13 +53,16 @@ all pages.
 | `rotate` | `pages?`, `degrees` | Rotate by a multiple of 90 (clockwise; negative allowed). |
 | `stamp-text` | `pages?`, `text`, `font?`, `size?`, `color?`, `opacity?`, `position?`, `rotation?`, `margin?`, `under?` | Text watermark or label. `{page}`/`{pages}` substituted. Defaults: Helvetica 36 pt grey, 50 % opacity, centred. |
 | `stamp-image` | `pages?`, `asset`, `width?`, `height?`, `opacity?`, `position?`, `margin?`, `under?` | Draw a JPEG/PNG supplied as a named asset. Missing width/height keep the aspect ratio; images never exceed the page. |
-| `page-numbers` | `pages?`, `format?`, `position?`, `font?`, `size?`, `margin?`, `color?`, `startAt?` | Default `"{page} / {pages}"`, bottom centre, 10 pt. |
+| `page-numbers` | `pages?`, `format?`, `position?`, `font?`, `size?`, `margin?`, `color?`, `startAt?` | Default `"{page} / {pages}"`, bottom centre, 10 pt. `{page:6}` zero-pads (Bates numbering). |
 | `metadata` | `title?`, `author?`, `subject?`, `keywords?`, `creator?`, `producer?` | Omitted fields untouched; `""` removes a field. |
 | `strip-metadata` | – | Remove XMP, the info dictionary and page thumbnails. |
 | `resize` | `pages?`, `size` or `width`+`height`, `mode?` | Change the page size, scaling content to match. `size` is `letter`, `legal`, `tabloid`, `a3`, `a4`, `a5` (add `-landscape` to turn it); `width`/`height` are points. `mode`: `fit` (default, keeps everything), `fill` (crops), `stretch`. |
 | `scale` | `pages?`, `factor` | Multiply the page size and its content; `0.5` halves. |
 | `reverse` | – | Reverse the page order. |
 | `compress-images` | `maxDpi?`, `quality?`, `convertLossless?`, `minPixels?` | Lossy: downsample images shown above `maxDpi` (default 150) and re-encode grey/RGB images as JPEG at `quality` (default 75). CMYK, indexed, 1-bit and JPEG 2000 images are kept. |
+| `flatten` | `forms?`, `annotations?` | Paint form fields and/or comments into the pages and remove them (both by default). |
+| `nup` | `perSheet` (2 or 4), `sheet?`, `landscape?`, `margin?`, `frames?` | Several pages per sheet. |
+| `booklet` | `sheet?`, `landscape?`, `margin?`, `frames?` | Fold-in-half order, two pages per sheet. |
 | `blank-pages` | `at?`, `count?`, `size?` | Insert `count` (default 1) empty pages before 1-based page `at` (omit to append). `size` as for `resize`; default matches the neighbouring page. |
 | `split` | `every?` or `ranges?` | Produce several files. Must be the **last** step. |
 

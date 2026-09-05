@@ -72,6 +72,25 @@ let idx = parse_page_ranges("1-3,7,odd,last,r2", doc.page_count())?;   // 0-base
 Grammar: `N`, `N-M`, `N-`, `-M`, `all`, `first`, `last`, `even`, `odd`, `rN`
 (N-th from the end). Order is preserved; duplicates are kept.
 
+## Sheets and booklets
+
+```rust
+use foliopdf::impose::{self, ImposeOptions};
+impose::nup(&mut doc, 2, &ImposeOptions::default())?;        // 2-up on landscape Letter
+impose::booklet(&mut doc, &ImposeOptions { sheet: "a4".into(), ..Default::default() })?;
+```
+
+## Images out, OCR text in
+
+```rust
+for im in foliopdf::extract::extract_images(&doc, &[0, 1])? { std::fs::write(format!("p{}.{}", im.page + 1, im.format), &im.data)?; }
+// Words from an OCR engine, boxes in display space:
+ops::add_text_layer(&mut doc, 0, &[ops::Word { text: "Invoice".into(), rect: Rect::new(72.0, 700.0, 140.0, 716.0) }])?;
+```
+
+The text layer is invisible (render mode 3) and scaled to each word's box,
+so the page becomes searchable and selectable without changing how it looks.
+
 ## Crop
 
 ```rust
