@@ -150,6 +150,31 @@ A local corpus of 452 real PDFs (211 MB, dozens of producers) loads,
 re-saves compressed, and reloads in 11.5 seconds total, with output 86% of
 the input size. WebAssembly runs at roughly half native speed.
 
+## How it is tested
+
+- **Unit and round-trip tests** run on every push on Linux, macOS and
+  Windows (`cargo test --workspace`: 113 tests covering the parser,
+  writer, encryption, fonts, forms, annotations, text engine, redaction,
+  image recompression and bookmarks), plus clippy with warnings as errors,
+  a minimum-Rust-version build, and a Node smoke test of the npm package.
+- **A corpus of real files.** Before a release the engine is run over a
+  private corpus of 470+ PDFs (11,600 pages) from dozens of producers:
+  Word, Chrome, Quartz, Qt, WeasyPrint, DocuSign, Acrobat, iText, Google
+  Docs, scanners. Every file must load, re-save with compression, and
+  reload; every page must extract to the same text before and after
+  re-saving; redacting a common word on every page must leave zero
+  matches on re-reading; recompressing images must produce files that
+  reload. The 0.2.0 runs: 0 load or save failures, 0 text changes after
+  re-save, 205,292 redaction matches with 0 leftovers, 582 images
+  recompressed with 0 failures.
+- **Rendering checks.** Generated forms, annotations, signatures,
+  flattened output and redactions are rendered with pdf.js (a separate
+  code base) and inspected page by page; the web app has a browser test
+  harness that drives every tool end to end.
+- **What is not tested automatically:** appearance in Acrobat itself and
+  other commercial viewers. The output follows ISO 32000 and is checked
+  against pdf.js; please report anything a viewer shows differently.
+
 ## Documentation
 
 - [Architecture](docs/architecture.md): how the pieces fit, design decisions
