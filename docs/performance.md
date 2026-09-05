@@ -43,7 +43,7 @@ Corpus: 452 real PDFs, 211 MB, load + compress + reload in 11.5 s (about
 ## WebAssembly
 
 Expect roughly 1.5–2× the native times in current browsers. The `.wasm` is
-about 780 KB; use a Web Worker for files over a few megabytes to keep the UI
+about 1.5 MB; use a Web Worker for files over a few megabytes to keep the UI
 responsive, and transfer the output `Uint8Array` rather than copying it.
 
 ## Memory
