@@ -90,11 +90,14 @@ fn build_sheets(
                 Some(p) => *p,
                 None => continue,
             };
-            if !forms.contains_key(&p) {
-                let f = page_as_form(doc, p)?;
-                forms.insert(p, f);
-            }
-            let (xref, disp, user_to_disp) = forms[&p];
+            let (xref, disp, user_to_disp) = match forms.get(&p) {
+                Some(f) => *f,
+                None => {
+                    let f = page_as_form(doc, p)?;
+                    forms.insert(p, f);
+                    f
+                }
+            };
             let name = doc.add_page_resource(idx, "XObject", xref)?;
             let inner = Rect::new(
                 cell.x0 + opts.margin,
@@ -270,7 +273,7 @@ mod tests {
         );
         let second = crate::text::page_text(&b, 1).unwrap();
         assert!(
-            second.contains("P2") && second.contains("P7") == false,
+            second.contains("P2") && !second.contains("P7"),
             "{second}"
         );
         assert!(nup(&mut numbered(1), 3, &ImposeOptions::default()).is_err());
