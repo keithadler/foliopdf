@@ -272,10 +272,7 @@ mod tests {
             "front of sheet 1 holds page 1 (and blank 8): {first}"
         );
         let second = crate::text::page_text(&b, 1).unwrap();
-        assert!(
-            second.contains("P2") && !second.contains("P7"),
-            "{second}"
-        );
+        assert!(second.contains("P2") && !second.contains("P7"), "{second}");
         assert!(nup(&mut numbered(1), 3, &ImposeOptions::default()).is_err());
     }
 }
