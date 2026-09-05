@@ -219,7 +219,13 @@ pub fn write(doc: &mut Document, opts: &SaveOptions) -> Result<Vec<u8>> {
 fn dedupe(doc: &Document, order: &mut Vec<u32>) -> HashMap<u32, u32> {
     let mut alias: HashMap<u32, u32> = HashMap::new();
     for _ in 0..6 {
-        let remap: HashMap<u32, u32> = alias.clone();
+        // Keys must see every reference: unaliased objects map to themselves.
+        // (Serialising through the alias map alone wrote unmapped references
+        // as `null`, which made distinct fonts compare equal.)
+        let remap: HashMap<u32, u32> = order
+            .iter()
+            .map(|&n| (n, *alias.get(&n).unwrap_or(&n)))
+            .collect();
         let mut seen: HashMap<Vec<u8>, u32> = HashMap::new();
         let mut changed = false;
         for &num in order.iter() {
@@ -435,6 +441,106 @@ mod tests {
         let mut out = Vec::new();
         serialize(&mut out, &d.into(), &HashMap::new());
         assert_eq!(out, b"<</A 1/B 2.5/C(hi)/D 4 0 R>>");
+    }
+
+    #[test]
+    fn dedupe_keeps_fonts_with_different_children() {
+        use crate::object::PdfString;
+        use crate::page::PageSize;
+        let mut doc = Document::new();
+        doc.add_page(PageSize::LETTER);
+        // Two identical image streams: a genuine duplicate that seeds the alias map.
+        let img = |d: &mut Document| {
+            d.add(
+                Stream::new(
+                    Dict::new()
+                        .with("Type", "XObject")
+                        .with("Subtype", "Image")
+                        .with("Width", 1)
+                        .with("Height", 1)
+                        .with("ColorSpace", "DeviceGray")
+                        .with("BitsPerComponent", 8),
+                    vec![7],
+                )
+                .into(),
+            )
+        };
+        let (i1, i2) = (img(&mut doc), img(&mut doc));
+        // Two fonts whose dictionaries differ only in the ToUnicode stream they point to.
+        let tu =
+            |d: &mut Document, body: &[u8]| d.add(Stream::new(Dict::new(), body.to_vec()).into());
+        let (t1, t2) = (tu(&mut doc, b"map one"), tu(&mut doc, b"map two"));
+        let font = |d: &mut Document, t: ObjRef| {
+            d.add(
+                Dict::new()
+                    .with("Type", "Font")
+                    .with("Subtype", "Type1")
+                    .with("BaseFont", "Helvetica")
+                    .with("ToUnicode", t)
+                    .into(),
+            )
+        };
+        let (f1, f2) = (font(&mut doc, t1), font(&mut doc, t2));
+        let res = Dict::new()
+            .with("Font", Dict::new().with("A", f1).with("B", f2))
+            .with("XObject", Dict::new().with("I1", i1).with("I2", i2));
+        let page = doc.page_ref(0).unwrap();
+        doc.get_mut(page)
+            .unwrap()
+            .as_dict_mut()
+            .unwrap()
+            .set("Resources", res);
+        let _ = PdfString::new(vec![]);
+        let bytes = doc
+            .save(&SaveOptions {
+                compress: true,
+                ..Default::default()
+            })
+            .unwrap();
+        let re = Document::load(&bytes).unwrap();
+        let page = re.page_ref(0).unwrap();
+        let res = re
+            .page_attr(page, "Resources")
+            .unwrap()
+            .as_dict()
+            .unwrap()
+            .clone();
+        let fonts = re
+            .dict_get(&res, "Font")
+            .unwrap()
+            .as_dict()
+            .unwrap()
+            .clone();
+        let body = |name: &str| -> Vec<u8> {
+            let f = re
+                .resolve(fonts.get(name).unwrap())
+                .as_dict()
+                .unwrap()
+                .clone();
+            let t = re
+                .resolve(f.get("ToUnicode").unwrap())
+                .as_stream()
+                .unwrap()
+                .clone();
+            re.stream_data(&t).unwrap()
+        };
+        assert_eq!(body("A"), b"map one");
+        assert_eq!(
+            body("B"),
+            b"map two",
+            "fonts with different ToUnicode maps must not be merged"
+        );
+        // The two images did merge.
+        let xo = re
+            .dict_get(&res, "XObject")
+            .unwrap()
+            .as_dict()
+            .unwrap()
+            .clone();
+        assert_eq!(
+            xo.get("I1").and_then(Object::as_reference),
+            xo.get("I2").and_then(Object::as_reference)
+        );
     }
 
     #[test]
