@@ -1,8 +1,8 @@
 //! Content stream parsing and writing (ISO 32000-1 §7.8.2).
 //!
 //! A content stream is a flat sequence of operands followed by an operator.
-//! [`parse`] turns it into [`Op`]s (inline images are kept as opaque byte
-//! runs) and [`write`] serialises them again, which is what lets the text
+//! [`parse()`] turns it into [`Op`]s (inline images are kept as opaque byte
+//! runs) and [`write()`] serialises them again, which is what lets the text
 //! engine rewrite a page without disturbing anything it does not understand.
 
 use std::collections::HashMap;
