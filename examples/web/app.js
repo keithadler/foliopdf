@@ -107,13 +107,13 @@ export const getFiles = () => files;
 let engineOk = false;
 
 // ---------------------------------------------------------------- boot
-const BUILD = "__VERSION__"; // stamped at deploy time (short commit hash)
+const BUILD = "__VERSION__"; // stamped at deploy time (short commit hash); every occurrence is replaced, hence the startsWith test below
 try {
   await init();
   engineOk = true;
   $("#status").textContent = "Ready · works offline · v" + version();
   $("#ver").textContent = "v" + version();
-  if (BUILD !== "__VERSION__") $("#build").textContent = "· build " + BUILD;
+  if (!BUILD.startsWith("__")) $("#build").textContent = "· build " + BUILD;
 } catch (e) {
   $("#status").textContent = "The PDF engine could not load. Try a current browser (Chrome, Edge, Firefox, Safari 15+).";
   $("#status").classList.add("bad");

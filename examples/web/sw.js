@@ -3,7 +3,9 @@
 // page offers a reload once the new worker has finished installing.
 const VERSION = "__VERSION__";
 const CACHE = "foliopdf-" + VERSION;
-const V = VERSION === "__VERSION__" ? "dev" : VERSION;
+// The deploy step replaces every "__VERSION__" (including the one on the
+// line above), so detect the unstamped state by the placeholder's shape.
+const V = VERSION.startsWith("__") ? "dev" : VERSION;
 const PRECACHE = [
   "./", "./index.html", "./manifest.webmanifest",
   `./app.js?v=${V}`, `./editor.js?v=${V}`, `./batch.js?v=${V}`, `./thumbs.js?v=${V}`,
