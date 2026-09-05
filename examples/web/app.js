@@ -75,10 +75,10 @@ function pref(id, defaults) {
 
 // ---------------------------------------------------------------- tools
 const TOOLS = [
-  // Ordered by how often people reach for each tool.
+  // Ordered by how often people reach for each tool; Fill & Sign first.
+  { id: "sign",      ico: "✍️", name: "Fill & Sign",       desc: "Type on any PDF, tick boxes, add the date, and draw or type your signature." },
   { id: "merge",     ico: "🧩", name: "Merge PDFs",        desc: "Combine several files into one, in the order you choose.", multi: true },
   { id: "compress",  ico: "🗜️", name: "Compress PDF",      desc: "Make files smaller. Keep images as they are, or shrink scans and photos too.", multi: true },
-  { id: "sign",      ico: "✍️", name: "Fill & Sign",       desc: "Type on any PDF, tick boxes, add the date, and draw or type your signature." },
   { id: "forms",     ico: "📋", name: "Fill a form",       desc: "Fill in the fields of a PDF form, then keep it editable or flatten it." },
   { id: "split",     ico: "✂️", name: "Split PDF",         desc: "Break a file into parts, or pull out just the pages you need." },
   { id: "images",    ico: "🖼️", name: "Images to PDF",     desc: "Turn photos, scans and screenshots (JPEG, PNG, WebP, HEIC…) into one PDF.", multi: true, accept: "image" },
