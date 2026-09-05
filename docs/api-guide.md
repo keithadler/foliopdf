@@ -228,6 +228,46 @@ fonts, so characters outside WinAnsi (Cyrillic, CJK, …) are shown as `?`;
 see [limitations.md](limitations.md). Merging or extracting pages keeps
 their fields, renaming on clashes.
 
+## Text: extract, search
+
+```rust
+use foliopdf::text::{self, SearchOptions};
+
+let plain = text::page_text(&doc, 0)?;                    // lines top to bottom, blank line between paragraphs
+for w in text::page_words(&doc, 0)? { println!("{} at {:?} (line {})", w.text, w.rect, w.line); }
+let hits = text::search(&doc, 0, "invoice total", &SearchOptions { case_insensitive: true, whole_word: false })?;
+for m in hits { println!("{:?} spans {} line(s), first at {:?}", m.text, m.rects.len(), m.rects[0]); }
+
+// Everything the engine saw, if you need positions of individual glyphs, images or paths:
+let content = text::page_content(&doc, 0)?;
+```
+
+Rectangles here are in user space; convert with `annot::to_display_rect`
+when you need them in display space. Fonts without a Unicode mapping are
+listed in `PageContent::unmapped_fonts`; their text comes out empty.
+
+## Redaction
+
+```rust
+use foliopdf::redact::{self, RedactOptions};
+
+// By area (display space, points from the bottom-left of the page as shown).
+let report = redact::redact(&mut doc, 0, &[Rect::new(72.0, 700.0, 300.0, 720.0)], &RedactOptions::default())?;
+// By text, over several pages.
+let (report, matches) = redact::redact_text(&mut doc, &[0, 1, 2], "555-0134", &SearchOptions::default(), &RedactOptions { fill: Some([0.0, 0.0, 0.0]), ..Default::default() })?;
+println!("{} glyphs, {} images ({} more blanked), {} paths, {} annotations removed", report.glyphs_removed, report.images_removed, report.images_edited, report.paths_removed, report.annotations_removed);
+for w in &report.warnings { eprintln!("note: {w}"); }
+```
+
+Redaction is a real removal, not a cover-up: glyphs are cut from the text
+operators (the rest of the line keeps its position), paths inside the area
+are deleted, image pixels under the area are blanked (or the image is
+removed when its codec cannot be decoded), form XObjects are copied and
+rewritten, overlapping annotations are deleted, and finally the area is
+painted. Set `fill: None` to remove without painting a box. Metadata is not
+touched; call `doc.strip_metadata()` if the document information could be
+sensitive too.
+
 ## Low level
 
 ```rust

@@ -33,6 +33,8 @@
 //! * [`ops`] – higher-level operations: merge, split, page ranges, stamps.
 //! * [`annot`] – highlights, drawings, notes, links, image stamps; flattening.
 //! * [`forms`] – list, fill and flatten interactive form fields.
+//! * [`text`] – extract text with positions, and search.
+//! * [`redact`] – remove text, graphics and image pixels under an area.
 //! * [`batch`] – run a JSON-described pipeline over many files; store and
 //!   reuse export presets.
 //! * [`object`] – the low-level object model when you need full control.
@@ -55,18 +57,23 @@ pub mod annot;
 pub mod batch;
 pub mod content;
 pub mod crypto;
+pub mod cstream;
 pub mod document;
 pub mod error;
 pub mod filters;
 pub mod font;
 pub mod forms;
 pub mod geometry;
+pub mod glyphlist;
 pub mod image;
+pub mod imgcodec;
 pub mod lexer;
 pub mod object;
 pub mod ops;
 pub mod page;
 pub mod parser;
+pub mod redact;
+pub mod text;
 pub mod writer;
 
 pub use crypto::{EncryptionOptions, Method as EncryptionMethod, Permissions};

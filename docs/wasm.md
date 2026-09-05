@@ -101,6 +101,21 @@ doc.removeField("email");
 The web app's Fill & Sign, Fill a form and Comment tools are built on
 exactly these calls (see `examples/web/editor.js`).
 
+## Text and redaction
+
+```ts
+doc.pageText(0);                                             // string
+doc.pageWords(0);                                            // [{ text, rect, line }]
+doc.search(0, "total", { caseInsensitive: true });           // [{ text, rects: Rect[], line }]
+const report = doc.redact(0, [{ x0: 72, y0: 80, x1: 300, y1: 100 }], { fill: [0, 0, 0] });
+const r2 = doc.redactText(null, "555-0134", { caseInsensitive: true }, {});   // all pages; r2.matches
+doc.stripMetadata();                                         // if the document info is sensitive too
+```
+
+`redact` removes what is under the rectangles (text, vector graphics, image
+pixels, annotations) and paints them over; it is not a cover-up. See the
+API guide for the details and limitations.
+
 ## Merge
 
 ```ts

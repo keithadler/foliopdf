@@ -11,7 +11,23 @@ All notable changes to this project are recorded here. The format follows
   `rc4-128` as documented; the old spellings (`aes256`, `aes128`, `rc4`) are
   still accepted when reading.
 
+### Fixed
+- Saving with `compress: true` could merge font dictionaries that differed
+  only in the objects they referenced (once any real duplicate object was
+  present), which scrambled extracted text and could show wrong
+  characters. Object de-duplication now compares references properly.
+
 ### Added
+- Text engine (`text` module): glyph positions and Unicode for simple and
+  composite fonts, words and lines in reading order, page text extraction,
+  and search (case-insensitive, whole-word, across line breaks). CLI `text`
+  and `search`; wasm `pageText`, `pageWords`, `search`.
+- True redaction (`redact` module): removes text, vector graphics and image
+  pixels (raw, Flate, JPEG) under areas or search matches, including inside
+  form XObjects and invisible OCR text; removes overlapping annotations;
+  paints the areas. CLI `redact`; wasm `redact`, `redactText`.
+- Web app: Redact (mark areas, find and mark every occurrence, report of
+  what was removed) and Extract text tools.
 - Interactive forms (`forms` module): list fields, fill text / check box /
   radio / drop-down / list fields with generated appearances, create and
   remove fields, flatten. Merging and extracting pages now carries form

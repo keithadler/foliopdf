@@ -11,6 +11,8 @@ use foliopdf::document::Metadata;
 use foliopdf::forms::{self, FieldValue, NewField};
 use foliopdf::geometry::{Point, Rect};
 use foliopdf::ops::{self, FitMode, ImageStamp, PageNumbers, TextStamp};
+use foliopdf::redact::{self, RedactOptions};
+use foliopdf::text::{self, SearchOptions};
 use foliopdf::{Document, LoadOptions, PageSize, SaveOptions};
 use js_sys::{Array, Object, Reflect, Uint8Array};
 use wasm_bindgen::prelude::*;
@@ -201,6 +203,27 @@ export interface NewField {
   tooltip?: string;
 }
 
+/** A word or line of text with its bounds (screen coordinates). */
+export interface TextSpan { text: string; rect: Rect; line: number }
+/** A search hit: one rectangle per line it spans (screen coordinates). */
+export interface SearchMatch { text: string; rects: Rect[]; line: number }
+export interface SearchOptions { caseInsensitive?: boolean; wholeWord?: boolean }
+
+export interface RedactOptions {
+  /** Colour of the box painted over each area; null paints nothing. Default black. */
+  fill?: [number, number, number] | null;
+  /** Remove annotations overlapping an area. Default true. */
+  removeAnnotations?: boolean;
+  /** Grow each area by this many points. Default 0.5. */
+  margin?: number;
+}
+export interface RedactReport {
+  glyphsRemoved: number; imagesRemoved: number; imagesEdited: number; pathsRemoved: number;
+  annotationsRemoved: number; formsEdited: number; warnings: string[];
+  /** Only for redactText: number of matches found. */
+  matches?: number;
+}
+
 export interface BatchInput { name: string; data: Uint8Array; password?: string }
 export interface BatchAsset { name: string; data: Uint8Array }
 export interface BatchOutput { name: string; data: Uint8Array; pages: number; bytes: number; sources: string[] }
@@ -237,6 +260,18 @@ extern "C" {
     pub type FieldValuesJs;
     #[wasm_bindgen(typescript_type = "NewField")]
     pub type NewFieldJs;
+    #[wasm_bindgen(typescript_type = "TextSpan[]")]
+    pub type TextSpanArrayJs;
+    #[wasm_bindgen(typescript_type = "SearchMatch[]")]
+    pub type SearchMatchArrayJs;
+    #[wasm_bindgen(typescript_type = "SearchOptions | undefined")]
+    pub type SearchOptionsJs;
+    #[wasm_bindgen(typescript_type = "Rect[]")]
+    pub type RectArrayJs;
+    #[wasm_bindgen(typescript_type = "RedactOptions | undefined")]
+    pub type RedactOptionsJs;
+    #[wasm_bindgen(typescript_type = "RedactReport")]
+    pub type RedactReportJs;
     #[wasm_bindgen(typescript_type = "Metadata")]
     pub type MetadataJs;
     #[wasm_bindgen(typescript_type = "PageInfo[]")]
@@ -679,6 +714,82 @@ impl PdfDocument {
     #[wasm_bindgen(js_name = removeField)]
     pub fn remove_field(&mut self, name: &str) -> Result<bool, JsError> {
         forms::remove_field(&mut self.inner, name).map_err(err)
+    }
+
+    // -- text -------------------------------------------------------------------
+
+    /// The page's text, lines top to bottom with a blank line between paragraphs.
+    #[wasm_bindgen(js_name = pageText)]
+    pub fn page_text(&self, page: usize) -> Result<String, JsError> {
+        text::page_text(&self.inner, page).map_err(err)
+    }
+
+    /// Words on a page with their bounds (screen coordinates).
+    #[wasm_bindgen(js_name = pageWords)]
+    pub fn page_words(&self, page: usize) -> Result<TextSpanArrayJs, JsError> {
+        let info = self.inner.page_info(page).map_err(err)?;
+        let h = info.display_height();
+        let mut words = text::page_words(&self.inner, page).map_err(err)?;
+        for w in &mut words {
+            w.rect = flip_rect(&annot::to_display_rect(&info, &w.rect), h);
+        }
+        Ok(to_js(&words)?.unchecked_into())
+    }
+
+    /// Finds text on a page. Matches may span line breaks.
+    pub fn search(
+        &self,
+        page: usize,
+        needle: &str,
+        options: SearchOptionsJs,
+    ) -> Result<SearchMatchArrayJs, JsError> {
+        let o: SearchOptions = from_js(options.into())?;
+        let info = self.inner.page_info(page).map_err(err)?;
+        let h = info.display_height();
+        let mut hits = text::search(&self.inner, page, needle, &o).map_err(err)?;
+        for m in &mut hits {
+            for r in &mut m.rects {
+                *r = flip_rect(&annot::to_display_rect(&info, r), h);
+            }
+        }
+        Ok(to_js(&hits)?.unchecked_into())
+    }
+
+    /// Permanently removes everything under `areas` (screen coordinates) on
+    /// a page: text, vector graphics, image pixels and annotations, then
+    /// paints the areas over.
+    pub fn redact(
+        &mut self,
+        page: usize,
+        areas: RectArrayJs,
+        options: RedactOptionsJs,
+    ) -> Result<RedactReportJs, JsError> {
+        let rects: Vec<Rect> = serde_wasm_bindgen::from_value(areas.into())
+            .map_err(|e| JsError::new(&format!("invalid areas: {e}")))?;
+        let o: RedactOptions = from_js(options.into())?;
+        let h = self.display_height(page)?;
+        let areas: Vec<Rect> = rects.iter().map(|r| flip_rect(r, h)).collect();
+        let report = redact::redact(&mut self.inner, page, &areas, &o).map_err(err)?;
+        Ok(to_js(&report)?.unchecked_into())
+    }
+
+    /// Finds `needle` on `pages` (null = all) and redacts every match.
+    #[wasm_bindgen(js_name = redactText)]
+    pub fn redact_text(
+        &mut self,
+        pages: Option<String>,
+        needle: &str,
+        search: SearchOptionsJs,
+        options: RedactOptionsJs,
+    ) -> Result<RedactReportJs, JsError> {
+        let so: SearchOptions = from_js(search.into())?;
+        let o: RedactOptions = from_js(options.into())?;
+        let idx = self.range(pages)?;
+        let (report, matches) =
+            redact::redact_text(&mut self.inner, &idx, needle, &so, &o).map_err(err)?;
+        let v = to_js(&report)?;
+        Reflect::set(&v, &"matches".into(), &(matches as u32).into()).ok();
+        Ok(v.unchecked_into())
     }
 
     fn display_height(&self, page: usize) -> Result<f64, JsError> {

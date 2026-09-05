@@ -23,11 +23,15 @@ getrandom.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+jpeg-decoder = { workspace = true, optional = true }
+jpeg-encoder = { workspace = true, optional = true }
 
 [dev-dependencies]
 
 [features]
-default = []
+default = ["jpeg"]
+# JPEG decoding and encoding (pure Rust), used to redact and recompress photos.
+jpeg = ["dep:jpeg-decoder", "dep:jpeg-encoder"]
 
 [[bench]]
 name = "throughput"

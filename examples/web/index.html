@@ -239,6 +239,10 @@
   .eitem .eshape { position: absolute; inset: 0; box-sizing: border-box; }
   .eitem .equad { position: absolute; }
   .eitem.highlight, .eitem.underline, .eitem.strike { cursor: default; }
+  .eitem .eredact { position: absolute; inset: 0; background: rgba(220, 38, 38, .28); border: 1.5px solid #7f1d1d; box-sizing: border-box; }
+  .eitem.redact.sel .eredact { background: rgba(220, 38, 38, .45); }
+  .epages[data-tool="area"] .eovl { cursor: crosshair; }
+  .tpreview { width: 100%; max-height: 260px; overflow: auto; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-word; margin: 4px 0 0; text-align: left; }
   .eitem .enote { position: absolute; inset: 0; border-radius: 4px; display: grid; place-items: center; font-size: 13px; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
   .ehandle { position: absolute; width: 12px; height: 12px; background: #fff; border: 2px solid #2563eb; border-radius: 50%; display: none; z-index: 3; }
   .eitem.sel .ehandle { display: block; } .ehandle.se { right: -7px; bottom: -7px; cursor: nwse-resize; } .ehandle.e { right: -7px; top: 50%; margin-top: -6px; cursor: ew-resize; }

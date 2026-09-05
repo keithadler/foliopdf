@@ -6,8 +6,18 @@ when you need one of these.
 ## Not implemented
 
 - **Rendering** pages to bitmaps. Use pdf.js, MuPDF or PDFium.
-- **Text extraction** with layout. `Document::page_content` gives you the
-  raw operators, but there is no text-run reconstruction or font decoding.
+- **Text layout analysis.** Text comes out line by line in reading order,
+  which is right for prose; table cells and multi-column layouts are
+  interleaved by line rather than reconstructed as columns.
+- **Predefined CJK CMaps** (`UniGB-UCS2-H` and friends) are not bundled, so
+  text in such fonts is readable only when the font carries a `ToUnicode`
+  map (most do). Fonts with no Unicode mapping at all are reported in
+  `PageContent::unmapped_fonts`; their text is empty and cannot be searched
+  or redacted by text (redact by area still works).
+- **Redaction of images** in JPEG 2000, CCITT fax or JBIG2 encoding blanks
+  the whole image (the codecs are not decoded); everything else is blanked
+  pixel by pixel. Vector paths that only cross a redaction area are kept.
+- **OCR.** Scanned pages have no text to extract, search or redact by text.
 - **Outlines (bookmarks)**, named destinations and article threads are not
   carried across `import_pages`/merge. They are preserved when you edit a
   single document in place.
@@ -22,8 +32,6 @@ when you need one of these.
 - **Rich text** (`/RV`) in fields and free-text annotations is ignored;
   plain text is drawn. XFA forms are not supported (only the AcroForm part).
 - **JavaScript** actions in forms (calculations, validation) are not run.
-- **Redaction.** Stamps and annotations draw over content; they do not
-  remove it.
 - **Linearisation** (fast web view). Output is compact but not linearised.
 - **Incremental updates.** Every save is a full rewrite. This is deliberate.
 - **Public-key encryption** (`/Filter /Adobe.PubSec`). Only the standard

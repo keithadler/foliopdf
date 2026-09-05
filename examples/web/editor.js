@@ -17,6 +17,11 @@ const MODES = {
     tools: [["select", "Select", "↖"], ["highlight", "Highlight", "🖍"], ["underline", "Underline", "U̲"], ["strike", "Strike", "S̶"], ["pen", "Draw", "✎"], ["text", "Text box", "T"], ["note", "Note", "💬"], ["rect", "Box", "▭"], ["ellipse", "Circle", "◯"], ["line", "Line", "╱"], ["image", "Image", "🖼"], ["sign", "Signature", "✍︎"]],
     hint: "Select text with the highlight tools, draw freehand, or drop notes and shapes. Comments stay editable in other apps unless you flatten them.",
   },
+  redact: {
+    title: "Redact",
+    tools: [["select", "Select", "↖"], ["area", "Mark area", "▮"], ["find", "Find text", "🔍"]],
+    hint: "Drag boxes over anything that must disappear, or find a word and mark every occurrence. Applying removes the text, graphics and image pixels underneath for good.",
+  },
   forms: {
     title: "Fill a form",
     tools: [["select", "Select", "↖"], ["sign", "Signature", "✍︎"], ["text", "Text", "T"]],
@@ -45,7 +50,8 @@ export async function createEditor(entry, mode, opts = {}) {
   const state = {
     items: opts.items ? JSON.parse(JSON.stringify(opts.items)) : [],
     values: opts.values ? { ...opts.values } : Object.fromEntries(fields.map((f) => [f.name, f.kind === "list" ? f.values : f.value])),
-    tool: mode === "forms" ? "select" : (mode === "fill" ? "text" : "highlight"),
+    tool: mode === "forms" ? "select" : mode === "fill" ? "text" : mode === "redact" ? "area" : "highlight",
+    redactFill: "#000000", findText: "", findCase: false,
     selected: null, zoom: 1, undo: [], redo: [], color: {}, penWidth: 2, textSize: 12,
     signature: opts.signature || null, initials: opts.initials || null,
   };
@@ -113,6 +119,15 @@ export async function createEditor(entry, mode, opts = {}) {
     } else if (kind === "image" || kind === "sign" || kind === "initials") {
       if (it) propbar.append(el("span", { class: "hint" }, "Drag to move, use the corner to resize."));
       else propbar.append(el("span", { class: "hint" }, state.tool === "image" ? "Click on the page to place the image." : "Click on the page to place it. Click again to place another copy."), el("button", { type: "button", class: "btn small", onclick: () => openSignature(state.tool === "initials") }, "Change"));
+    } else if (mode === "redact" && (kind === "area" || kind === "find" || kind === "redact" || kind === "select")) {
+      const marks = state.items.filter((i) => i.kind === "redact").length;
+      if (kind === "find" || (kind === "select" && !it)) {
+        const inp = el("input", { type: "text", placeholder: "Word or phrase", value: state.findText, "aria-label": "Text to find", oninput: (e) => (state.findText = e.target.value), onkeydown: (e) => { if (e.key === "Enter") { e.preventDefault(); markAll(); } } });
+        propbar.append(el("label", { class: "eprop" }, "Find", inp), el("button", { type: "button", class: "btn small", onclick: markAll }, "Mark all matches"), el("label", { class: "check eprop" }, el("input", { type: "checkbox", checked: state.findCase, onchange: (e) => (state.findCase = e.target.checked) }), el("span", {}, "Match case")));
+      }
+      if (kind === "area") propbar.append(el("span", { class: "hint" }, "Drag on the page to mark an area."));
+      propbar.append(el("span", { class: "hint" }, marks ? `${marks} area${marks === 1 ? "" : "s"} marked.` : "Nothing marked yet."));
+      if (marks) propbar.append(el("button", { type: "button", class: "btn small", onclick: () => { snapshot(); state.items = state.items.filter((i) => i.kind !== "redact"); state.selected = null; renderAll(); } }, "Clear all"));
     } else if (kind === "select" && mode === "forms") {
       propbar.append(el("span", { class: "hint" }, `${fields.length} form field${fields.length === 1 ? "" : "s"}. Type into the blue boxes.`), el("button", { type: "button", class: "btn small", onclick: () => { for (const f of fields) state.values[f.name] = f.kind === "checkbox" || f.kind === "radio" ? "Off" : f.kind === "list" ? [] : ""; renderAll(); } }, "Clear all fields"));
     } else if (kind === "select") {
@@ -122,6 +137,23 @@ export async function createEditor(entry, mode, opts = {}) {
       propbar.append(el("button", { type: "button", class: "btn small danger", onclick: deleteSelected }, "Delete"));
       if (it.kind === "sign" || it.kind === "initials" || it.kind === "image") propbar.append(el("button", { type: "button", class: "btn small", onclick: () => { snapshot(); const c = { ...it, id: nextId++, x: it.x + 12, y: it.y + 12 }; state.items.push(c); renderItem(c); select(c.id); } }, "Duplicate"));
     }
+  }
+  function markAll() {
+    const needle = (state.findText || "").trim();
+    if (!needle) { toast("Type a word or phrase to find."); return; }
+    let n = 0;
+    snapshot();
+    for (const p of pages) {
+      let hits = [];
+      try { hits = entry.doc.search(p.index, needle, { caseInsensitive: !state.findCase }); } catch (e) { console.warn(e); }
+      for (const h of hits) for (const r of h.rects) {
+        if (state.items.some((i) => i.kind === "redact" && i.page === p.index && Math.abs(i.x - r.x0) < 0.5 && Math.abs(i.y - r.y0) < 0.5 && Math.abs(i.w - (r.x1 - r.x0)) < 0.5)) continue;
+        const it = { id: nextId++, kind: "redact", page: p.index, x: r.x0 - 1, y: r.y0 - 1, w: r.x1 - r.x0 + 2, h: r.y1 - r.y0 + 2, text: h.text };
+        state.items.push(it); renderItem(it); n++;
+      }
+    }
+    toast(n ? `Marked ${n} occurrence${n === 1 ? "" : "s"} of “${needle}”.` : `“${needle}” was not found. The text may be an image (scan) rather than real text.`);
+    renderProps();
   }
   function swatchRow(colors, value, onpick) {
     const w = el("span", { class: "swatches" });
@@ -255,6 +287,12 @@ export async function createEditor(entry, mode, opts = {}) {
         }
         break;
       }
+      case "redact": {
+        box(it.x, it.y, it.w, it.h);
+        n.title = it.text ? `Will remove: ${it.text}` : "Will be removed";
+        n.append(el("div", { class: "eredact" }), handle("se"));
+        break;
+      }
       case "note": {
         box(it.x, it.y, 20, 20);
         n.append(el("div", { class: "enote", style: `background:${it.color}`, title: it.contents || "Note" }, "💬"));
@@ -269,7 +307,7 @@ export async function createEditor(entry, mode, opts = {}) {
   // Dragging and resizing of an existing item.
   function wireItem(n, it) {
     n.onpointerdown = (e) => {
-      if (state.tool !== "select" && !["text", "date", "sign", "initials", "image", "check", "cross", "dot"].includes(state.tool)) return;
+      if (state.tool !== "select" && !["text", "date", "sign", "initials", "image", "check", "cross", "dot", "area", "find"].includes(state.tool)) return;
       if (e.target.classList.contains("etext")) return;
       e.stopPropagation(); e.preventDefault();
       select(it.id);
@@ -334,6 +372,14 @@ export async function createEditor(entry, mode, opts = {}) {
         addItem(it); p.ovl.setPointerCapture(e.pointerId);
         p.ovl.onpointermove = (ev) => { const [px, py] = pagePoint(p, ev); const last = it.points[it.points.length - 1]; if (Math.hypot(px - last[0], py - last[1]) > 0.7) { it.points.push([px, py]); renderItem(it); } };
         p.ovl.onpointerup = p.ovl.onpointercancel = () => { p.ovl.onpointermove = null; if (it.points.length < 2) it.points.push([x + 0.5, y + 0.5]); renderItem(it); select(it.id); };
+        return;
+      }
+      if (tool === "find") { select(null); return; }
+      if (tool === "area") {
+        const it = { kind: "redact", page: p.index, x, y, w: 1, h: 1 };
+        addItem(it); p.ovl.setPointerCapture(e.pointerId);
+        p.ovl.onpointermove = (ev) => { const [px, py] = pagePoint(p, ev); it.x = Math.min(x, px); it.y = Math.min(y, py); it.w = Math.max(1, Math.abs(px - x)); it.h = Math.max(1, Math.abs(py - y)); renderItem(it); };
+        p.ovl.onpointerup = p.ovl.onpointercancel = () => { p.ovl.onpointermove = null; if (it.w < 3 || it.h < 3) { state.items = state.items.filter((i) => i !== it); itemNode(it)?.remove(); } else select(it.id); renderProps(); };
         return;
       }
       if (["rect", "ellipse", "line"].includes(tool)) {
@@ -484,10 +530,24 @@ export async function createEditor(entry, mode, opts = {}) {
    * file). `flatten`: burn everything into the page content. Returns the
    * number of things written.
    */
-  function apply(doc, { flatten = true, author = "" } = {}) {
+  function apply(doc, { flatten = true, author = "", fill = "#000000", strip = false } = {}) {
     const meta = { modified: pdfDate(), ...(author ? { author } : {}) };
     const created = [];
     let n = 0;
+    if (mode === "redact") {
+      const byPage = new Map();
+      for (const it of state.items) if (it.kind === "redact") { if (!byPage.has(it.page)) byPage.set(it.page, []); byPage.get(it.page).push({ x0: it.x, y0: it.y, x1: it.x + it.w, y1: it.y + it.h }); }
+      const total = { glyphsRemoved: 0, imagesRemoved: 0, imagesEdited: 0, pathsRemoved: 0, annotationsRemoved: 0, formsEdited: 0, warnings: [] };
+      for (const [page, rects] of byPage) {
+        const r = doc.redact(page, rects, { fill: fill === "none" ? null : hexToRgb(fill) });
+        for (const k of Object.keys(total)) if (k !== "warnings") total[k] += r[k] || 0;
+        total.warnings.push(...(r.warnings || []));
+        n += rects.length;
+      }
+      if (strip) doc.stripMetadata();
+      api.lastReport = total;
+      return n;
+    }
     if (mode === "forms") {
       const vals = {};
       for (const f of fields) {

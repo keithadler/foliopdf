@@ -13,6 +13,8 @@ use foliopdf::crypto::{EncryptionOptions, Method, Permissions};
 use foliopdf::document::Metadata;
 use foliopdf::forms::{self, FieldValue};
 use foliopdf::ops::{self, ImageStamp, PageNumbers, Position, TextStamp};
+use foliopdf::redact::{self, RedactOptions};
+use foliopdf::text::{self, SearchOptions};
 use foliopdf::{Document, LoadOptions, SaveOptions};
 
 const HELP: &str = "\
@@ -45,6 +47,11 @@ COMMANDS
   fields   <in.pdf> [--json]               List form fields and their values
   fill     <in.pdf> <out.pdf> --set name=value... [--data values.json] [--flatten]
   annots   <in.pdf> [--json]               List annotations
+  text     <in.pdf> [--pages all] [--out file.txt]      Extract text
+  search   <in.pdf> \"needle\" [--pages all] [-i] [--word] [--json]
+  redact   <in.pdf> <out.pdf> --text \"needle\"... [-i] [--word] [--pages all]
+                              | --area PAGE:x,y,w,h...   [--no-fill] [--color r,g,b]
+                              Remove text, graphics and image pixels for good
   flatten  <in.pdf> <out.pdf> [--forms | --annots] [--pages all]
                                            Burn form fields and/or annotations into the pages
   batch    <preset.json> <in.pdf>... [--out-dir D] [--asset name=path]...
@@ -182,6 +189,9 @@ fn run(argv: &[String]) -> Result<(), String> {
         "fields" => fields(&args),
         "fill" => fill(&args),
         "annots" => annots(&args),
+        "text" => text_cmd(&args),
+        "search" => search_cmd(&args),
+        "redact" => redact_cmd(&args),
         "flatten" => flatten(&args),
         "batch" => batch_cmd(&args),
         "presets" => presets(&args),
@@ -777,6 +787,129 @@ fn annots(args: &Args) -> Result<(), String> {
             a.rect.y1,
             what
         );
+    }
+    Ok(())
+}
+
+fn text_cmd(args: &Args) -> Result<(), String> {
+    let input = args.pos(1, "input file")?;
+    let doc = load(args, input)?;
+    let idx = range(args, &doc, "pages")?;
+    let mut out = String::new();
+    for (k, p) in idx.iter().enumerate() {
+        if k > 0 {
+            out.push_str("\n\x0c\n");
+        }
+        out.push_str(&text::page_text(&doc, *p).map_err(|e| e.to_string())?);
+    }
+    match args.flag("out") {
+        Some(path) => std::fs::write(path, out).map_err(|e| format!("{path}: {e}")),
+        None => {
+            println!("{out}");
+            Ok(())
+        }
+    }
+}
+
+fn search_opts(args: &Args) -> SearchOptions {
+    SearchOptions {
+        case_insensitive: args.has("i") || args.has("ignore-case"),
+        whole_word: args.has("word"),
+    }
+}
+
+fn search_cmd(args: &Args) -> Result<(), String> {
+    let (input, needle) = (args.pos(1, "input file")?, args.pos(2, "search text")?);
+    let doc = load(args, input)?;
+    let idx = range(args, &doc, "pages")?;
+    let so = search_opts(args);
+    let mut rows = Vec::new();
+    for p in idx {
+        let info = doc.page_info(p).map_err(|e| e.to_string())?;
+        for m in text::search(&doc, p, needle, &so).map_err(|e| e.to_string())? {
+            let r = foliopdf::annot::to_display_rect(&info, &m.rects[0]);
+            rows.push((p, m.text.clone(), r, m.rects.len()));
+        }
+    }
+    if args.has("json") {
+        let v: Vec<serde_json::Value> = rows.iter().map(|(p, t, r, n)| serde_json::json!({ "page": p, "text": t, "x": r.x0, "y": r.y0, "width": r.width(), "height": r.height(), "lines": n })).collect();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&v).map_err(|e| e.to_string())?
+        );
+        return Ok(());
+    }
+    for (p, t, r, _) in &rows {
+        println!(
+            "p{:<4} [{:.0},{:.0} {:.0}x{:.0}]  {}",
+            p + 1,
+            r.x0,
+            r.y0,
+            r.width(),
+            r.height(),
+            t
+        );
+    }
+    eprintln!("folio: {} match(es)", rows.len());
+    Ok(())
+}
+
+fn redact_cmd(args: &Args) -> Result<(), String> {
+    let (input, out) = (args.pos(1, "input file")?, args.pos(2, "output file")?);
+    let mut doc = load(args, input)?;
+    let mut opts = RedactOptions::default();
+    if args.has("no-fill") {
+        opts.fill = None;
+    }
+    if let Some(c) = args.flag("color") {
+        let v: Vec<f64> = c.split(',').filter_map(|x| x.trim().parse().ok()).collect();
+        if v.len() != 3 {
+            return Err("--color expects r,g,b in 0..1".into());
+        }
+        opts.fill = Some([v[0], v[1], v[2]]);
+    }
+    let needles = args.all("text");
+    let areas = args.all("area");
+    if needles.is_empty() && areas.is_empty() {
+        return Err("redact needs --text \"...\" or --area PAGE:x,y,w,h".into());
+    }
+    let idx = range(args, &doc, "pages")?;
+    let so = search_opts(args);
+    let mut total = redact::RedactReport::default();
+    let mut matches = 0;
+    for n in &needles {
+        let (r, m) =
+            redact::redact_text(&mut doc, &idx, n, &so, &opts).map_err(|e| e.to_string())?;
+        matches += m;
+        total.merge(r);
+    }
+    for a in &areas {
+        let (page, rest) = a
+            .split_once(':')
+            .ok_or_else(|| format!("--area expects PAGE:x,y,w,h, got '{a}'"))?;
+        let page: usize = page
+            .parse()
+            .map_err(|_| format!("--area: bad page '{page}'"))?;
+        let v: Vec<f64> = rest
+            .split(',')
+            .filter_map(|x| x.trim().parse().ok())
+            .collect();
+        if v.len() != 4 || page == 0 || page > doc.page_count() {
+            return Err(format!(
+                "--area expects PAGE:x,y,w,h (points from the bottom-left), got '{a}'"
+            ));
+        }
+        let rect = foliopdf::Rect::from_xywh(v[0], v[1], v[2], v[3]);
+        let r = redact::redact(&mut doc, page - 1, &[rect], &opts).map_err(|e| e.to_string())?;
+        total.merge(r);
+    }
+    write(&mut doc, out, &save_opts(args)?)?;
+    eprintln!(
+        "folio: {} match(es); removed {} glyph(s), {} path(s), {} image(s) ({} more blanked), {} annotation(s)",
+        matches, total.glyphs_removed, total.paths_removed, total.images_removed, total.images_edited, total.annotations_removed
+    );
+    for w in &total.warnings {
+        eprintln!("folio: warning: {w}");
     }
     Ok(())
 }

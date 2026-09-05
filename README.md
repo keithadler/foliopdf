@@ -7,7 +7,7 @@ annotate, merge, split, reorder, rotate, resize, stamp, compress and encrypt
 them, and write clean compact output. Runs in browsers, Node, Deno, Bun and
 natively on Linux, macOS and Windows.
 
-- **Web app**: [keithadler.github.io/foliopdf](https://keithadler.github.io/foliopdf/): fill & sign, fill forms, comment and mark up, merge, split, compress, protect, organize, watermark and more, all in the browser, nothing uploaded.
+- **Web app**: [keithadler.github.io/foliopdf](https://keithadler.github.io/foliopdf/): fill & sign, fill forms, comment and mark up, redact, extract text, merge, split, compress, protect, organize, watermark and more, all in the browser, nothing uploaded.
 - **Rust crate** `foliopdf`: the engine, no I/O, no `unsafe`.
 - **npm package** `foliopdf`: WebAssembly bindings with TypeScript types.
 - **CLI** `folio`: single binary for scripts and shells.
@@ -15,6 +15,7 @@ natively on Linux, macOS and Windows.
 ```bash
 folio merge out.pdf a.pdf b.pdf c.pdf
 folio fill form.pdf done.pdf --set name="Ada Lovelace" --set agree=true --flatten
+folio redact report.pdf clean.pdf --text "555-0134" -i
 folio encrypt out.pdf locked.pdf --owner s3cret --no-copy --no-modify
 folio stamp report.pdf draft.pdf --text DRAFT --rotation 45 --opacity 0.3
 folio batch presets.json --preset draft-watermark *.pdf --out-dir out/
@@ -27,6 +28,8 @@ await init();
 const doc = PdfDocument.load(bytes);          // Uint8Array
 doc.setField("name", "Ada Lovelace");
 doc.addAnnotation(0, { kind: "highlight", quads: [{ x0: 72, y0: 80, x1: 300, y1: 94 }] }, { author: "Ada" });
+doc.redactText(null, "555-0134", { caseInsensitive: true }, {});
+const text = doc.pageText(0);
 doc.deletePages("2,5-7");
 doc.stampText(null, { text: "CONFIDENTIAL", rotation: 45, opacity: 0.25 });
 doc.addPageNumbers(null, { format: "{page} / {pages}" });
@@ -69,13 +72,15 @@ and the result has one clean cross-reference section.
 | Merge and split | merge any number of files; split by page count or by ranges; page-range language `1-3,7,odd,last,r2` |
 | Forms | list fields (text, check box, radio, drop-down, list, signature), fill them with generated appearances, create and remove fields, flatten; fields survive merging and extraction |
 | Annotations | highlight, underline, strike-out, box, circle, line, ink, text box, sticky note, link, image stamp (signatures), each with an appearance stream; list, remove, flatten selectively |
+| Text | extract text with positions (simple and composite fonts, encodings, ToUnicode, form XObjects), words and lines in reading order, search with case and whole-word options |
+| Redaction | true removal of text, vector graphics and image pixels (raw, Flate and JPEG) under an area or a search term, including inside form XObjects; overlapping annotations removed; boxes painted over |
 | Stamps | text watermarks and image logos (JPEG/PNG with alpha) with opacity, rotation and nine anchor positions; page numbers; stamps stay upright on rotated pages |
 | Fonts | standard 14 with real metrics; embedded TrueType/OpenType with glyph subsetting and ToUnicode |
 | Compression | stream recompression, object streams, cross-reference streams, dedup of identical fonts and images, metadata stripping |
 | Batch | JSON presets: merge-or-each modes, ordered steps, output naming templates, encryption; `PresetStore` for saving export configurations |
 
-Not in scope (yet): rendering pages to pixels, text extraction with layout,
-cryptographic digital signatures, redaction. See [docs/limitations.md](docs/limitations.md).
+Not in scope (yet): rendering pages to pixels, cryptographic digital
+signatures, OCR. See [docs/limitations.md](docs/limitations.md).
 
 ## Install
 

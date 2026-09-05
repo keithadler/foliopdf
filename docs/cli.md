@@ -132,6 +132,28 @@ folio flatten <in.pdf> <out.pdf> [--forms | --annots] [--pages all]
 Paints annotations into the page content and removes them. `--forms` does
 only form fields, `--annots` only comments and markup; the default does both.
 
+```
+folio text <in.pdf> [--pages 1-3] [--out file.txt]
+```
+Extracts the text, lines top to bottom, pages separated by a form feed.
+
+```
+folio search <in.pdf> "needle" [--pages all] [-i] [--word] [--json]
+```
+Lists matches with page and position (points from the bottom-left of the
+page as displayed). `-i` ignores case, `--word` matches whole words.
+
+```
+folio redact <in.pdf> <out.pdf> --text "needle" [--text "other"] [-i] [--word] [--pages all]
+folio redact <in.pdf> <out.pdf> --area 2:72,700,200,20 [--no-fill] [--color 1,1,1]
+```
+Removes for good whatever is under each match or area: the text (so a
+later search finds nothing), vector graphics inside the area, and the
+pixels of images under it (undecodable image formats are removed whole and
+reported). Then paints a black box, unless `--no-fill` or another
+`--color`. `--area` takes `PAGE:x,y,width,height` in points from the
+bottom-left of the displayed page. Consider `--strip-metadata` as well.
+
 ## Exit status and output
 
 `0` on success. Errors go to stderr prefixed with `folio:` and exit `1`.

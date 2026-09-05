@@ -58,6 +58,8 @@ const TOOLS = [
   { id: "sign",      ico: "✍️", name: "Fill & Sign",       desc: "Type on any PDF, tick boxes, add the date, and draw or type your signature." },
   { id: "forms",     ico: "📋", name: "Fill a form",       desc: "Fill in the fields of a PDF form, then keep it editable or flatten it." },
   { id: "annotate",  ico: "💬", name: "Comment & mark up", desc: "Highlight, underline, draw, add notes, shapes and stamps." },
+  { id: "redact",    ico: "⬛", name: "Redact",            desc: "Black out words, numbers or areas so they are truly gone from the file, not just covered." },
+  { id: "extract",   ico: "📄", name: "Extract text",      desc: "Pull the text out of a PDF as a plain text file you can search or paste anywhere.", multi: true },
   { id: "merge",     ico: "🧩", name: "Merge PDFs",        desc: "Combine several files into one, in the order you choose.", multi: true },
   { id: "split",     ico: "✂️", name: "Split PDF",         desc: "Break a file into parts, or pull out just the pages you need." },
   { id: "compress",  ico: "🗜️", name: "Compress PDF",      desc: "Make files smaller without touching the quality of scans or photos.", multi: true },
@@ -337,12 +339,19 @@ function showResults(outs, ms) {
   const list = el("div", { class: "outs" });
   const links = [];
   for (const o of outs) {
-    const url = URL.createObjectURL(new Blob([o.data], { type: "application/pdf" })); links.push([url, o.name]);
+    const url = URL.createObjectURL(new Blob([o.data], { type: o.mime || "application/pdf" })); links.push([url, o.name]);
     const size = o.before != null
       ? el("div", { class: "info" }, `${plural(o.pages, "page")} · ${kb(o.before)} → ${kb(o.data.length)} `, el("b", {}, o.before > o.data.length * 1.02 ? `saved ${Math.round(100 - 100 * o.data.length / o.before)}%` : "already as small as it gets"))
       : el("div", { class: "info" }, `${plural(o.pages, "page")} · ${kb(o.data.length)}`);
-    list.append(el("div", { class: "out" }, el("div", { class: "fico", "aria-hidden": true }, "PDF"), el("div", { class: "meta" }, el("div", { class: "name", title: o.name }, o.name), size),
-      el("div", { class: "obtns" }, el("a", { class: "btn small", href: url, target: "_blank", rel: "noopener", title: "Open in a new tab" }, "Preview"), el("a", { class: "btn small primary", style: "font-size:14px;padding:8px 14px", href: url, download: o.name }, "Download"))));
+    const meta = el("div", { class: "meta" }, el("div", { class: "name", title: o.name }, o.name), size);
+    if (o.note) meta.append(el("div", { class: "info" }, o.note));
+    const btns = el("div", { class: "obtns" });
+    if (o.preview != null) btns.append(el("button", { class: "btn small", onclick: () => { navigator.clipboard?.writeText(o.preview).then(() => toast("Copied to the clipboard."), () => toast("Couldn't copy.")); } }, "Copy text"));
+    else btns.append(el("a", { class: "btn small", href: url, target: "_blank", rel: "noopener", title: "Open in a new tab" }, "Preview"));
+    btns.append(el("a", { class: "btn small primary", style: "font-size:14px;padding:8px 14px", href: url, download: o.name }, "Download"));
+    const card = el("div", { class: "out" }, el("div", { class: "fico", "aria-hidden": true }, o.mime === "text/plain" ? "TXT" : "PDF"), meta, btns);
+    if (o.preview != null) card.append(el("pre", { class: "tpreview" }, o.preview.length > 4000 ? o.preview.slice(0, 4000) + "\n…" : o.preview));
+    list.append(card);
   }
   const again = el("div", { class: "again" });
   if (outs.length > 1) again.append(el("button", { class: "btn primary", onclick: () => { links.forEach(([u, n], i) => setTimeout(() => { const a = el("a", { href: u, download: n }); document.body.append(a); a.click(); a.remove(); }, i * 300)); toast(`Downloading ${outs.length} files. Your browser may ask once to allow multiple downloads.`); } }, `Download all ${outs.length} files`));
@@ -360,10 +369,11 @@ async function perFile(suffix, fn, saveOpts = {}, opts = {}) {
     await sleep(0);
     const doc = f.pw ? PdfDocument.loadWithPassword(f.bytes, f.pw) : PdfDocument.load(f.bytes);
     try {
-      const r = await fn(doc, f);
+      const out = {};
+      const r = await fn(doc, f, out);
       if (r === false) continue;
       const data = doc.save(saveOpts);
-      outs.push({ name: `${stem(f.file.name)}${suffix}.pdf`, data, pages: doc.pageCount(), before: opts.showSavings ? f.bytes.length : undefined });
+      outs.push({ name: `${stem(f.file.name)}${suffix}.pdf`, data, pages: doc.pageCount(), before: opts.showSavings ? f.bytes.length : undefined, ...out });
     } finally { doc.free(); }
   }
   if (!outs.length) throw new Error("Nothing to do.");
@@ -621,6 +631,25 @@ const STAGES = {
       cta("Save changes", () => runJob("Updating", () => perFile("-edited", (doc) => { if (o.strip) doc.stripMetadata(); doc.setMetadata({ title: o.title, author: o.author, subject: o.subject, keywords: o.keywords }); }, { stripMetadata: false }))));
   },
   sign() { editorStage("sign", "fill", "-signed", "Sign & save"); },
+  redact() { editorStage("redact", "redact", "-redacted", "Apply redactions"); },
+  extract() {
+    put(dropzone(), fileList(), summaryLine());
+    if (!ready().length) return;
+    const o = pref("extract", { breaks: true });
+    put(el("div", { class: "panel" }, el("h3", {}, "Options"), el("div", { class: "row" }, check("Mark page breaks with a line of dashes", o.breaks, (v) => (o.breaks = v))),
+      el("p", { class: "summary", style: "margin:12px 0 0" }, "Text is read in the order it appears on each page. Scanned pages contain no real text; they come out empty.")),
+      cta(`Extract text from ${ready().length > 1 ? plural(ready().length, "file") : "PDF"}`, () => runJob("Extracting", async () => {
+        const outs = []; const list = ready(); let k = 0;
+        for (const f of list) {
+          setProgress(++k, list.length, f.file.name); await sleep(0);
+          const parts = []; let empty = 0;
+          for (let p = 0; p < f.pages; p++) { const t = f.doc.pageText(p); if (!t.trim()) empty++; parts.push(t); }
+          const text = parts.join(o.breaks ? "\n\n" + "-".repeat(40) + "\n\n" : "\n\n");
+          outs.push({ name: stem(f.file.name) + ".txt", data: new TextEncoder().encode(text), pages: f.pages, mime: "text/plain", preview: text, note: empty ? `${plural(empty, "page")} had no text (probably scanned images).` : null });
+        }
+        return outs;
+      })));
+  },
   forms() { editorStage("forms", "forms", "-filled", "Save filled form"); },
   annotate() { editorStage("annotate", "annotate", "-annotated", "Save"); },
   batch() { batchStage(); },
@@ -649,11 +678,16 @@ function editorStage(toolId, mode, suffix, label) {
   };
   mount();
   const opts = el("div", { class: "row" });
-  if (mode === "annotate") opts.append(check("Flatten: burn the comments into the page so they can't be edited or removed", o.flatten, (v) => (o.flatten = v)), field("Your name (shown on comments, optional)", el("input", { type: "text", value: o.author, placeholder: "e.g. Ada", oninput: (e) => (o.author = e.target.value) })));
+  if (mode === "redact") { o.fill ??= "#000000"; o.strip ??= true; opts.append(field("Box colour", segmented([["#000000", "Black"], ["#ffffff", "White"], ["none", "No box, just remove"]], o.fill, (v) => (o.fill = v), "Box colour")), check("Also wipe hidden metadata (author, title, editing history)", o.strip, (v) => (o.strip = v))); saveBar.append(el("p", { class: "summary", style: "margin:0 0 10px" }, "Redaction is permanent: the text, drawings and image pixels under each box are deleted from the file, not hidden. Check the result before sharing it.")); }
+  else if (mode === "annotate") opts.append(check("Flatten: burn the comments into the page so they can't be edited or removed", o.flatten, (v) => (o.flatten = v)), field("Your name (shown on comments, optional)", el("input", { type: "text", value: o.author, placeholder: "e.g. Ada", oninput: (e) => (o.author = e.target.value) })));
   else if (mode === "forms") opts.append(check("Flatten: make the filled form permanent (fields can no longer be changed)", o.flatten, (v) => (o.flatten = v)));
   else opts.append(el("p", { class: "summary", style: "margin:0" }, "Everything you add becomes a permanent part of the page, like ink on paper."));
   saveBar.append(el("h3", {}, "Save"), opts,
-    cta(label, () => runJob("Saving", () => perFile(suffix, (doc) => { const n = editor.api.apply(doc, { flatten: o.flatten, author: o.author }); if (!n) throw new Error(mode === "forms" ? "Nothing was filled in yet." : "Nothing has been added yet. Use the tools above the page first."); }))));
+    cta(label, () => runJob(mode === "redact" ? "Redacting" : "Saving", () => perFile(suffix, (doc, f, out) => {
+      const n = editor.api.apply(doc, { flatten: o.flatten, author: o.author, fill: o.fill, strip: o.strip });
+      if (!n) throw new Error(mode === "forms" ? "Nothing was filled in yet." : mode === "redact" ? "Nothing is marked yet. Drag a box over the page or find a word first." : "Nothing has been added yet. Use the tools above the page first.");
+      if (mode === "redact" && editor.api.lastReport) { const r = editor.api.lastReport; out.note = `Removed ${plural(r.glyphsRemoved, "character")}, ${plural(r.pathsRemoved, "drawing")}, ${r.imagesRemoved + r.imagesEdited} image${r.imagesRemoved + r.imagesEdited === 1 ? "" : "s"} and ${plural(r.annotationsRemoved, "annotation")}.` + (r.warnings.length ? " " + r.warnings[0] : ""); }
+    }))));
 }
 
 // Route last, once every tool is defined, so deep links like #merge work on a cold load.
