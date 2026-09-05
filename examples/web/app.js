@@ -1,4 +1,4 @@
-import init, { PdfDocument, runBatch, PresetStore, parsePageRanges, version, imagesToPdf } from "./pkg/foliopdf.js";
+import init, { PdfDocument, runBatch, PresetStore, parsePageRanges, version, imagesToPdf } from "./pkg/foliopdf.js?v=dev";
 import { thumbnailer } from "./thumbs.js?v=dev";
 import { batchStage } from "./batch.js?v=dev";
 import { createEditor } from "./editor.js?v=dev";
@@ -140,7 +140,8 @@ let engineOk = false;
 // ---------------------------------------------------------------- boot
 const BUILD = "__VERSION__"; // stamped at deploy time (short commit hash); every occurrence is replaced, hence the startsWith test below
 try {
-  await init();
+  // The build stamp on the URL makes each deploy's engine bypass HTTP caches.
+  await init({ module_or_path: new URL("./pkg/foliopdf_bg.wasm?v=dev", import.meta.url).href });
   engineOk = true;
   $("#status").textContent = "Ready · works offline · v" + version();
   $("#ver").textContent = "v" + version();

@@ -9,7 +9,7 @@ const V = VERSION.startsWith("__") ? "dev" : VERSION;
 const PRECACHE = [
   "./", "./index.html", "./manifest.webmanifest",
   `./app.js?v=${V}`, `./editor.js?v=${V}`, `./batch.js?v=${V}`, `./thumbs.js?v=${V}`,
-  "./pkg/foliopdf.js", "./pkg/foliopdf_bg.wasm",
+  `./pkg/foliopdf.js?v=${V}`, `./pkg/foliopdf_bg.wasm?v=${V}`,
   "./vendor/pdf.min.mjs", "./vendor/pdf.worker.min.mjs",
   "./icons/icon-192.png", "./icons/icon-512.png", "./icons/maskable-512.png", "./icons/apple-touch-icon.png",
 ];
