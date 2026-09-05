@@ -307,7 +307,9 @@ impl Preset {
                         .map_err(|e| Error::Preset(format!("step {}: {e}", i + 1)))?;
                 }
                 Step::CompressImages { options }
-                    if !(1..=100).contains(&options.quality) || !(options.max_dpi > 0.0) =>
+                    if !(1..=100).contains(&options.quality)
+                        || options.max_dpi <= 0.0
+                        || options.max_dpi.is_nan() =>
                 {
                     return Err(Error::Preset(format!(
                         "step {}: quality must be 1–100 and maxDpi positive",

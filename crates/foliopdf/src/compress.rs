@@ -260,7 +260,7 @@ pub fn compress_images(doc: &mut Document, opts: &ImageOptions) -> Result<ImageR
         doc.set(r, Stream::new(nd, encoded).into());
     }
     let mut sk: Vec<(String, usize)> = skipped.into_iter().collect();
-    sk.sort_by(|a, b| b.1.cmp(&a.1));
+    sk.sort_by_key(|x| std::cmp::Reverse(x.1));
     report.skipped = sk
         .into_iter()
         .map(|(w, n)| if n > 1 { format!("{w} ({n})") } else { w })

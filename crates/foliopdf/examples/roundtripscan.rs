@@ -1,3 +1,4 @@
+#![allow(clippy::needless_range_loop)]
 //! Text fidelity across a compressed re-save: extracts every page before and
 //! after, and reports any page whose text changed. `-- DIR...`
 use foliopdf::{text, Document, SaveOptions};
