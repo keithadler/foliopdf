@@ -127,6 +127,8 @@ const TOOLS = [
   { id: "flatten",   ico: "🧊", name: "Flatten",            desc: "Make form fields and comments a permanent part of the page.", multi: true },
   { id: "repair",    ico: "🩹", name: "Repair PDF",         desc: "Rebuild a damaged file that other apps refuse to open.", multi: true },
 ];
+const KEYWORDS = { sign: "signature initials date tick check fill type write e-sign esign", merge: "combine join append concatenate", compress: "shrink smaller reduce size scan photo jpeg", forms: "form field acroform fillable", split: "separate extract pages part", images: "jpg jpeg png photo scan heic webp convert to pdf", toimages: "jpg png export render picture convert from pdf", ocr: "scan searchable recognise recognize text tesseract", protect: "password encrypt lock permissions", unlock: "password decrypt remove restrictions", rotate: "turn landscape portrait", organize: "reorder move arrange drag sort", delete: "remove pages", annotate: "comment highlight underline note draw ink shape stamp markup review", extract: "text txt copy plain", compare: "diff difference versions changes", watermark: "stamp draft confidential logo", headers: "header footer bates numbering title date legal", numbers: "page numbers pagination", redact: "black out remove sensitive censor permanently", crop: "trim margins", booklet: "n-up 2-up 4-up imposition print fold sheet", flatten: "burn permanent annotations forms", extractimages: "pictures photos save images out", bookmarks: "outline table of contents navigation", resize: "a4 letter scale page size", repair: "fix broken damaged corrupt recover", info: "metadata title author properties", batch: "presets automate many files recipe" };
+const FEATURED = new Set(["sign", "merge", "compress", "forms"]);
 const ORDER = ["sign", "merge", "compress", "forms", "split", "images", "toimages", "ocr", "protect", "unlock", "rotate", "organize", "delete", "annotate", "extract", "compare", "watermark", "headers", "numbers", "redact", "crop", "booklet", "flatten", "extractimages", "bookmarks", "resize", "repair", "info", "batch"];
 TOOLS.sort((a, b) => ORDER.indexOf(a.id) - ORDER.indexOf(b.id));
 
@@ -191,7 +193,41 @@ $("#theme").onclick = () => { theme = THEMES[(THEMES.findIndex((x) => x[0] === t
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (theme === "auto") applyTheme("auto"); });
 
 const grid = $("#tools");
-for (const t of TOOLS) grid.append(el("button", { class: "tool", "data-tool": t.id, onclick: () => open(t.id) }, el("div", { class: "ico", "aria-hidden": true }, t.ico), el("b", {}, t.name), el("span", {}, t.desc)));
+for (const t of TOOLS) grid.append(el("button", { class: "tool" + (FEATURED.has(t.id) ? " featured" : ""), "data-tool": t.id, onclick: () => open(t.id) }, el("div", { class: "ico", "aria-hidden": true }, t.ico), el("b", {}, t.name), el("span", {}, t.desc)));
+// Search / quick filter over names, descriptions and keywords.
+const findBox = $("#findtool");
+function filterTools() {
+  const q = findBox.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  let shown = 0;
+  for (const card of grid.children) {
+    const t = TOOLS.find((x) => x.id === card.dataset.tool);
+    const hay = `${t.name} ${t.desc} ${KEYWORDS[t.id] || ""}`.toLowerCase();
+    const ok = q.every((w) => hay.includes(w));
+    card.classList.toggle("dim", !ok); if (ok) shown++;
+  }
+  $("#nomatch").hidden = shown > 0;
+}
+findBox.oninput = filterTools;
+findBox.onkeydown = (e) => { if (e.key === "Enter") { const first = [...grid.children].find((c) => !c.classList.contains("dim")); if (first) first.click(); } if (e.key === "Escape") { findBox.value = ""; filterTools(); findBox.blur(); } };
+document.addEventListener("keydown", (e) => { if (e.key === "/" && !current && !(e.target instanceof Element && e.target.closest("input,textarea,select,[contenteditable]"))) { e.preventDefault(); findBox.focus(); } });
+// Hero dropzone: files dropped here travel into whichever tool is opened next.
+let pending = [];
+const hero = $("#herodrop");
+function showPending() {
+  const box = $("#pending"); box.innerHTML = ""; box.hidden = pending.length === 0;
+  if (!pending.length) return;
+  const isImg = pending.every((f) => /^image\//.test(f.type) || /\.(jpe?g|png|webp|gif|heic|heif)$/i.test(f.name));
+  box.append(el("span", {}, pending.length === 1 ? `${pending[0].name} is ready.` : `${pending.length} files are ready.`), el("span", {}, isImg ? "Pick Images to PDF below." : "Now pick a tool below; the file goes with you."), el("button", { type: "button", onclick: () => { pending = []; showPending(); } }, "Clear"));
+  if (isImg) { const card = grid.querySelector('[data-tool="images"]'); card?.scrollIntoView({ block: "center", behavior: "smooth" }); }
+}
+function takePending(list) { pending = [...list]; showPending(); if (pending.length) { findBox.value = ""; filterTools(); } }
+hero.onclick = () => { const p = $("#picker"); p.multiple = true; p.accept = "application/pdf,.pdf,image/*"; p.value = ""; p.onchange = (e) => { takePending(e.target.files); p.onchange = (ev) => addFiles(ev.target.files); }; p.click(); };
+hero.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); hero.click(); } };
+hero.ondragover = (e) => { e.preventDefault(); hero.classList.add("over"); };
+hero.ondragleave = () => hero.classList.remove("over");
+hero.ondrop = (e) => { e.preventDefault(); e.stopPropagation(); hero.classList.remove("over"); takePending(e.dataTransfer.files); };
+document.addEventListener("drop", (e) => { if (!current && e.dataTransfer?.files?.length) { e.preventDefault(); takePending(e.dataTransfer.files); } }, true);
+document.addEventListener("dragover", (e) => { if (!current) e.preventDefault(); });
 $("#home-link").onclick = (e) => { e.preventDefault(); home(); };
 $("#back").onclick = home;
 window.addEventListener("hashchange", route);
@@ -213,6 +249,7 @@ function open(id, fromRoute) {
   document.title = current.name + " — foliopdf";
   if (fromRoute !== true) history.pushState(null, "", "#" + id);
   stage = $("#stage"); renderStage(); window.scrollTo(0, 0);
+  if (pending.length) { const take = pending; pending = []; showPending(); addFiles(take); }
 }
 
 // ---------------------------------------------------------------- files
