@@ -6,6 +6,13 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-04
+
+Version 1.0: a complete replacement for the everyday PDF desktop app. The
+web app has 29 tools, all running on the device; the Rust crate, npm
+package and `folio` CLI expose the same engine. The API is considered
+stable from here: breaking changes will bump the major version.
+
 ### Added
 - OCR in the web app (Tesseract.js, on-device): recognised words become an
   invisible, searchable text layer (`ops::add_text_layer`, wasm
