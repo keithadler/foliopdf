@@ -37,6 +37,24 @@ folio rotate <in.pdf> <out.pdf> --degrees 90 [--pages odd]
 ```
 
 ```
+folio resize <in.pdf> <out.pdf> --size a4 [--mode fit|fill|stretch] [--pages all]
+folio resize <in.pdf> <out.pdf> --size 612x792
+folio resize <in.pdf> <out.pdf> --scale 0.5
+```
+Changes the page box and scales the content (and annotations) to match.
+Named sizes: `letter`, `legal`, `tabloid`, `a3`, `a4`, `a5`, each optionally
+with `-landscape`; or `WxH` in points. `fit` (default) keeps everything and
+centres it, `fill` crops the overflow, `stretch` distorts to fill exactly.
+`--scale` multiplies both the page and its content.
+
+```
+folio reverse <in.pdf> <out.pdf>
+folio blank <in.pdf> <out.pdf> [--at N] [--count 1] [--size a4]
+```
+`blank` inserts empty pages before page N (omit `--at` to append). Without
+`--size` the new pages match their neighbour.
+
+```
 folio compress <in.pdf> <out.pdf> [--level 9] [--strip-metadata]
 ```
 Recompresses streams, packs objects, drops unreferenced and duplicate

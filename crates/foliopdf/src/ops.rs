@@ -9,7 +9,8 @@ use crate::error::{Error, Result};
 use crate::font::{Font, StandardFont};
 use crate::geometry::{Matrix, Rect};
 use crate::image::Image;
-use crate::object::ObjRef;
+use crate::object::{ObjRef, Object};
+use crate::page::PageSize;
 
 // ---------------------------------------------------------------------------
 // Page ranges
@@ -471,6 +472,160 @@ pub fn delete_pages(doc: &mut Document, pages: &[usize]) -> Result<()> {
     doc.select_pages(&keep)
 }
 
+/// How page content is fitted when the page size changes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum FitMode {
+    /// Scale uniformly so the whole page fits, centred, leaving margins.
+    #[default]
+    Fit,
+    /// Scale uniformly so the page is covered, cropping the overflow.
+    Fill,
+    /// Stretch each axis independently to fill exactly.
+    Stretch,
+}
+
+/// Resizes pages to `target`, scaling their content to match.
+///
+/// The target is interpreted in *display* orientation: a rotated page keeps
+/// its rotation and is fitted so that what the reader sees matches the target.
+/// Annotation rectangles are transformed with the content. Crop boxes are
+/// removed, since the page box is being redefined.
+pub fn resize_pages(
+    doc: &mut Document,
+    pages: &[usize],
+    target: PageSize,
+    mode: FitMode,
+) -> Result<()> {
+    if !(target.width.is_finite() && target.height.is_finite())
+        || target.width <= 1.0
+        || target.height <= 1.0
+    {
+        return Err(Error::Preset(
+            "page size must be larger than 1 point".into(),
+        ));
+    }
+    for &i in pages {
+        let info = doc.page_info(i)?;
+        // Work in unrotated user space: swap the target when the viewer rotates the page.
+        let (tw, th) = if info.rotation.swaps_axes() {
+            (target.height, target.width)
+        } else {
+            (target.width, target.height)
+        };
+        let src = info.media_box;
+        let (sw, sh) = (src.width().max(1.0), src.height().max(1.0));
+        let (sx, sy) = match mode {
+            FitMode::Stretch => (tw / sw, th / sh),
+            FitMode::Fit => {
+                let s = (tw / sw).min(th / sh);
+                (s, s)
+            }
+            FitMode::Fill => {
+                let s = (tw / sw).max(th / sh);
+                (s, s)
+            }
+        };
+        let tx = (tw - sw * sx) / 2.0 - src.x0 * sx;
+        let ty = (th - sh * sy) / 2.0 - src.y0 * sy;
+        let m = Matrix::new(sx, 0.0, 0.0, sy, tx, ty);
+        let mut prefix = Vec::new();
+        prefix.extend_from_slice(b"q ");
+        for v in [m.a, m.b, m.c, m.d, m.e, m.f] {
+            crate::content::write_num(&mut prefix, v);
+            prefix.push(b' ');
+        }
+        prefix.extend_from_slice(
+            b"cm
+",
+        );
+        doc.wrap_content(
+            i, &prefix, b"
+Q
+",
+        )?;
+        transform_annotations(doc, info.obj, &m);
+        let page = doc.page_ref(i)?;
+        let d = doc
+            .get_mut(page)
+            .and_then(Object::as_dict_mut)
+            .ok_or_else(|| Error::malformed("page is not a dictionary"))?;
+        d.set("MediaBox", Rect::new(0.0, 0.0, tw, th).to_object());
+        d.remove("CropBox");
+        d.remove("BleedBox");
+        d.remove("TrimBox");
+        d.remove("ArtBox");
+    }
+    Ok(())
+}
+
+/// Scales pages by `factor` (1.0 leaves them unchanged), keeping the aspect
+/// ratio. The page box grows or shrinks with the content.
+pub fn scale_pages(doc: &mut Document, pages: &[usize], factor: f64) -> Result<()> {
+    if !factor.is_finite() || factor <= 0.0 {
+        return Err(Error::Preset("scale must be greater than zero".into()));
+    }
+    for &i in pages {
+        let info = doc.page_info(i)?;
+        let b = info.media_box;
+        let (w, h) = (b.width() * factor, b.height() * factor);
+        let target = if info.rotation.swaps_axes() {
+            PageSize::new(h, w)
+        } else {
+            PageSize::new(w, h)
+        };
+        resize_pages(doc, &[i], target, FitMode::Stretch)?;
+    }
+    Ok(())
+}
+
+fn transform_annotations(doc: &mut Document, page: ObjRef, m: &Matrix) {
+    let refs: Vec<ObjRef> = match doc
+        .get(page)
+        .as_dict()
+        .and_then(|d| d.get("Annots"))
+        .map(|o| doc.resolve(o).clone())
+    {
+        Some(Object::Array(a)) => a.iter().filter_map(Object::as_reference).collect(),
+        _ => return,
+    };
+    for r in refs {
+        let rect = doc
+            .get(r)
+            .as_dict()
+            .and_then(|d| d.get("Rect"))
+            .and_then(Rect::from_object);
+        if let Some(rc) = rect {
+            let p0 = m.apply(crate::geometry::Point::new(rc.x0, rc.y0));
+            let p1 = m.apply(crate::geometry::Point::new(rc.x1, rc.y1));
+            if let Some(d) = doc.get_mut(r).and_then(Object::as_dict_mut) {
+                d.set("Rect", Rect::new(p0.x, p0.y, p1.x, p1.y).to_object());
+            }
+        }
+    }
+}
+
+/// Inserts `count` blank pages of `size` at `at` (0 = before the first page).
+pub fn insert_blank_pages(
+    doc: &mut Document,
+    at: usize,
+    count: usize,
+    size: PageSize,
+) -> Result<Vec<ObjRef>> {
+    let mut out = Vec::with_capacity(count);
+    for k in 0..count {
+        let page = crate::object::Dict::new().with("MediaBox", size.rect().to_object());
+        out.push(doc.insert_page(at + k, page)?);
+    }
+    Ok(out)
+}
+
+/// Reverses the order of all pages.
+pub fn reverse_pages(doc: &mut Document) -> Result<()> {
+    let order: Vec<usize> = (0..doc.page_count()).rev().collect();
+    doc.select_pages(&order)
+}
+
 /// Applies metadata.
 pub fn set_metadata(doc: &mut Document, m: &Metadata) {
     doc.set_metadata(m);
@@ -496,6 +651,74 @@ mod tests {
         assert!(parse_page_ranges("6", 5).is_err());
         assert!(parse_page_ranges("x", 5).is_err());
         assert_eq!(chunk_pages(5, 2), vec![vec![0, 1], vec![2, 3], vec![4]]);
+    }
+
+    #[test]
+    fn fit_modes() {
+        use crate::Document;
+        let mut doc = Document::new();
+        doc.add_page(PageSize::new(200.0, 100.0));
+        resize_pages(&mut doc, &[0], PageSize::new(400.0, 400.0), FitMode::Fit).unwrap();
+        let info = doc.page_info(0).unwrap();
+        assert_eq!(
+            (info.media_box.width(), info.media_box.height()),
+            (400.0, 400.0)
+        );
+        let content = String::from_utf8(doc.page_content(0).unwrap()).unwrap();
+        // Fit: scale 2, centred vertically (400 - 200) / 2 = 100.
+        assert!(content.starts_with("q 2 0 0 2 0 100 cm"), "{content}");
+        assert!(content.trim_end().ends_with("Q"), "{content}");
+
+        let mut doc = Document::new();
+        doc.add_page(PageSize::new(200.0, 100.0));
+        resize_pages(
+            &mut doc,
+            &[0],
+            PageSize::new(400.0, 400.0),
+            FitMode::Stretch,
+        )
+        .unwrap();
+        assert!(String::from_utf8(doc.page_content(0).unwrap())
+            .unwrap()
+            .starts_with("q 2 0 0 4 0 0 cm"));
+
+        let mut doc = Document::new();
+        doc.add_page(PageSize::new(200.0, 100.0));
+        scale_pages(&mut doc, &[0], 0.5).unwrap();
+        let info = doc.page_info(0).unwrap();
+        assert_eq!(
+            (info.media_box.width(), info.media_box.height()),
+            (100.0, 50.0)
+        );
+    }
+
+    #[test]
+    fn resize_respects_rotation() {
+        use crate::Document;
+        let mut doc = Document::new();
+        doc.add_page(PageSize::new(200.0, 100.0));
+        doc.rotate_page(0, 90).unwrap();
+        resize_pages(&mut doc, &[0], PageSize::LETTER, FitMode::Fit).unwrap();
+        let info = doc.page_info(0).unwrap();
+        // The media box is swapped so the displayed page is Letter-shaped.
+        assert_eq!(
+            (info.media_box.width(), info.media_box.height()),
+            (792.0, 612.0)
+        );
+        assert_eq!(info.display_width(), 612.0);
+    }
+
+    #[test]
+    fn blank_pages_and_reverse() {
+        use crate::Document;
+        let mut doc = Document::new();
+        doc.add_page(PageSize::LETTER);
+        doc.add_page(PageSize::LETTER);
+        insert_blank_pages(&mut doc, 1, 2, PageSize::A4).unwrap();
+        assert_eq!(doc.page_count(), 4);
+        assert!((doc.page_info(1).unwrap().media_box.width() - 595.28).abs() < 0.01);
+        reverse_pages(&mut doc).unwrap();
+        assert!((doc.page_info(2).unwrap().media_box.width() - 595.28).abs() < 0.01);
     }
 
     #[test]

@@ -7,7 +7,7 @@
 
 use foliopdf::batch::{self, Asset, Input, Preset, PresetStore as CoreStore};
 use foliopdf::document::Metadata;
-use foliopdf::ops::{self, ImageStamp, PageNumbers, TextStamp};
+use foliopdf::ops::{self, FitMode, ImageStamp, PageNumbers, TextStamp};
 use foliopdf::{Document, LoadOptions, PageSize, SaveOptions};
 use js_sys::{Array, Object, Reflect, Uint8Array};
 use wasm_bindgen::prelude::*;
@@ -135,6 +135,8 @@ extern "C" {
     pub type ImageStampJs;
     #[wasm_bindgen(typescript_type = "PageNumberOptions | undefined")]
     pub type PageNumbersJs;
+    #[wasm_bindgen(typescript_type = "ResizeOptions")]
+    pub type ResizeJs;
     #[wasm_bindgen(typescript_type = "Metadata")]
     pub type MetadataJs;
     #[wasm_bindgen(typescript_type = "PageInfo[]")]
@@ -360,6 +362,64 @@ impl PdfDocument {
         let settings: PageNumbers = from_js(options.into())?;
         let idx = self.range(pages)?;
         ops::add_page_numbers(&mut self.inner, &idx, &settings).map_err(err)
+    }
+
+    /// Resizes pages to a named size or explicit dimensions, scaling the
+    /// content to match. `pages` may be null for all.
+    #[wasm_bindgen(js_name = resizePages)]
+    pub fn resize_pages(
+        &mut self,
+        pages: Option<String>,
+        options: ResizeJs,
+    ) -> Result<(), JsError> {
+        #[derive(serde::Deserialize, Default)]
+        #[serde(default, rename_all = "camelCase")]
+        struct Opts {
+            size: Option<String>,
+            width: Option<f64>,
+            height: Option<f64>,
+            mode: FitMode,
+        }
+        let o: Opts = from_js(options.into())?;
+        let target = batch::resolve_size(o.size.as_deref(), o.width, o.height).map_err(err)?;
+        let idx = self.range(pages)?;
+        ops::resize_pages(&mut self.inner, &idx, target, o.mode).map_err(err)
+    }
+
+    /// Scales pages and their content by `factor` (0.5 halves them).
+    #[wasm_bindgen(js_name = scalePages)]
+    pub fn scale_pages(&mut self, pages: Option<String>, factor: f64) -> Result<(), JsError> {
+        let idx = self.range(pages)?;
+        ops::scale_pages(&mut self.inner, &idx, factor).map_err(err)
+    }
+
+    /// Inserts `count` blank pages of `width` × `height` points before
+    /// 0-based index `at` (pass the page count to append).
+    #[wasm_bindgen(js_name = insertBlankPages)]
+    pub fn insert_blank_pages(
+        &mut self,
+        at: usize,
+        count: usize,
+        width: f64,
+        height: f64,
+    ) -> Result<(), JsError> {
+        let at = at.min(self.inner.page_count());
+        ops::insert_blank_pages(&mut self.inner, at, count, PageSize::new(width, height))
+            .map_err(err)?;
+        Ok(())
+    }
+
+    /// Reverses the page order.
+    #[wasm_bindgen(js_name = reversePages)]
+    pub fn reverse_pages(&mut self) -> Result<(), JsError> {
+        ops::reverse_pages(&mut self.inner).map_err(err)
+    }
+
+    /// Whether the file was opened with owner (full) rights. True for
+    /// unencrypted files.
+    #[wasm_bindgen(js_name = hasOwnerAccess)]
+    pub fn has_owner_access(&self) -> bool {
+        self.inner.has_owner_access()
     }
 
     /// Decoded content stream of a page (for debugging).

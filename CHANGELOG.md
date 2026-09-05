@@ -12,9 +12,15 @@ All notable changes to this project are recorded here. The format follows
   still accepted when reading.
 
 ### Added
-- Web app: page thumbnails (via pdf.js) in Organize and in clickable page
-  grids for Delete, Split, Rotate, Watermark and Page numbers; visual preset
-  builder with import/export; phone layout.
+- `ops::resize_pages`, `ops::scale_pages`, `ops::reverse_pages` and
+  `ops::insert_blank_pages`; batch steps `resize`, `scale`, `reverse` and
+  `blank-pages`; CLI commands `resize`, `reverse` and `blank`; wasm methods
+  `resizePages`, `scalePages`, `reversePages`, `insertBlankPages` and
+  `hasOwnerAccess`.
+- Web app: Page size tool; blank pages in Organize; light/dark theme toggle;
+  thumbnail size control; page thumbnails (via pdf.js) in Organize and in
+  clickable page grids for Delete, Split, Rotate, Watermark and Page numbers;
+  visual preset builder with import/export; phone layout.
 
 ## [0.1.0] - 2026-09-03
 

@@ -56,6 +56,10 @@ all pages.
 | `page-numbers` | `pages?`, `format?`, `position?`, `font?`, `size?`, `margin?`, `color?`, `startAt?` | Default `"{page} / {pages}"`, bottom centre, 10 pt. |
 | `metadata` | `title?`, `author?`, `subject?`, `keywords?`, `creator?`, `producer?` | Omitted fields untouched; `""` removes a field. |
 | `strip-metadata` | – | Remove XMP, the info dictionary and page thumbnails. |
+| `resize` | `pages?`, `size` or `width`+`height`, `mode?` | Change the page size, scaling content to match. `size` is `letter`, `legal`, `tabloid`, `a3`, `a4`, `a5` (add `-landscape` to turn it); `width`/`height` are points. `mode`: `fit` (default, keeps everything), `fill` (crops), `stretch`. |
+| `scale` | `pages?`, `factor` | Multiply the page size and its content; `0.5` halves. |
+| `reverse` | – | Reverse the page order. |
+| `blank-pages` | `at?`, `count?`, `size?` | Insert `count` (default 1) empty pages before 1-based page `at` (omit to append). `size` as for `resize`; default matches the neighbouring page. |
 | `split` | `every?` or `ranges?` | Produce several files. Must be the **last** step. |
 
 `position` is one of `top-left top-center top-right center-left center

@@ -61,7 +61,7 @@ and the result has one clean cross-reference section.
 | Filters | Flate, LZW, ASCIIHex, ASCII85, RunLength, PNG/TIFF predictors; image codecs passed through intact |
 | Encryption in | RC4 40–128 bit, AES-128, AES-256 (revisions 2–6), user or owner password |
 | Encryption out | AES-256 (default), AES-128, RC4-128; full permission flags; optional unencrypted metadata |
-| Pages | insert, delete, reorder, duplicate, rotate, resize; import pages between documents with all their dependencies |
+| Pages | insert, delete, reorder, duplicate, rotate, reverse, blank pages; resize to A4/Letter/any size or scale, with content and annotations scaled to match; import pages between documents with all their dependencies |
 | Merge and split | merge any number of files; split by page count or by ranges; page-range language `1-3,7,odd,last,r2` |
 | Stamps | text watermarks and image logos (JPEG/PNG with alpha) with opacity, rotation and nine anchor positions; page numbers; stamps stay upright on rotated pages |
 | Fonts | standard 14 with real metrics; embedded TrueType/OpenType with glyph subsetting and ToUnicode |

@@ -1,9 +1,16 @@
 import init, { PdfDocument, runBatch, PresetStore, parsePageRanges, version } from "./pkg/foliopdf.js";
-import { thumbnailer } from "./thumbs.js";
-import { batchStage } from "./batch.js";
+import { thumbnailer } from "./thumbs.js?v=dev";
+import { batchStage } from "./batch.js?v=dev";
 export { PdfDocument, runBatch, PresetStore, parsePageRanges };
 
 // ---------------------------------------------------------------- helpers
+const PAPER = [["Letter", 612, 792], ["Legal", 612, 1008], ["Tabloid", 792, 1224], ["A3", 841.89, 1190.55], ["A4", 595.28, 841.89], ["A5", 419.53, 595.28]];
+/** "A4", "Letter (landscape)" or "8.5 × 11 in" for a page of w × h points. */
+export function sizeLabel(w, h) {
+  for (const [n, pw, ph] of PAPER) { if (Math.abs(w - pw) < 2 && Math.abs(h - ph) < 2) return n; if (Math.abs(w - ph) < 2 && Math.abs(h - pw) < 2) return n + " (landscape)"; }
+  const inch = (v) => (Math.round(v / 72 * 100) / 100).toString();
+  return `${inch(w)} × ${inch(h)} in`;
+}
 export const $ = (s, r = document) => r.querySelector(s);
 export const el = (tag, attrs = {}, ...kids) => {
   const e = document.createElement(tag);
@@ -54,7 +61,8 @@ const TOOLS = [
   { id: "unlock",    ico: "🔓", name: "Unlock PDF",        desc: "Remove a password from a file you have the password for.", multi: true },
   { id: "rotate",    ico: "🔄", name: "Rotate PDF",        desc: "Turn every page, or just the odd or even ones.", multi: true },
   { id: "delete",    ico: "🗑️", name: "Delete pages",      desc: "Remove pages you don't want." },
-  { id: "organize",  ico: "🗂️", name: "Organize pages",    desc: "Drag pages into a new order, rotate or remove them one by one." },
+  { id: "organize",  ico: "🗂️", name: "Organize pages",    desc: "Drag pages into a new order, rotate, remove or add blank pages." },
+  { id: "resize",    ico: "📐", name: "Page size",         desc: "Change pages to A4, Letter or any size, or scale them up or down.", multi: true },
   { id: "watermark", ico: "💧", name: "Watermark",         desc: "Stamp text like DRAFT or CONFIDENTIAL, or a logo, on every page.", multi: true },
   { id: "numbers",   ico: "🔢", name: "Page numbers",      desc: "Add page numbers wherever you like.", multi: true },
   { id: "info",      ico: "📝", name: "Edit document info", desc: "Change the title, author and keywords, or wipe hidden metadata.", multi: true },
@@ -78,6 +86,21 @@ try {
   $("#status").textContent = "The PDF engine could not load. Try a current browser (Chrome, Edge, Firefox, Safari 15+).";
   $("#status").classList.add("bad");
 }
+// Theme: Auto (follow system) → Light → Dark.
+const THEMES = [["auto", "◐", "Auto"], ["light", "☀︎", "Light"], ["dark", "☾", "Dark"]];
+function applyTheme(t) {
+  const dark = t === "dark" || (t === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+  const [, ico, label] = THEMES.find((x) => x[0] === t) || THEMES[0];
+  $("#theme-ico").textContent = ico; $("#theme-label").textContent = label;
+  $("#theme").setAttribute("aria-label", `Colour theme: ${label}. Click to change.`);
+  try { if (t === "auto") localStorage.removeItem("foliopdf.theme"); else localStorage.setItem("foliopdf.theme", t); } catch {}
+}
+let theme = (() => { try { return localStorage.getItem("foliopdf.theme") || "auto"; } catch { return "auto"; } })();
+applyTheme(theme);
+$("#theme").onclick = () => { theme = THEMES[(THEMES.findIndex((x) => x[0] === theme) + 1) % THEMES.length][0]; applyTheme(theme); };
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (theme === "auto") applyTheme("auto"); });
+
 const grid = $("#tools");
 for (const t of TOOLS) grid.append(el("button", { class: "tool", "data-tool": t.id, onclick: () => open(t.id) }, el("div", { class: "ico", "aria-hidden": true }, t.ico), el("b", {}, t.name), el("span", {}, t.desc)));
 $("#home-link").onclick = (e) => { e.preventDefault(); home(); };
@@ -173,7 +196,7 @@ export function fileList(opts = {}) {
     }
     acts.append(el("button", { class: "iconbtn", title: "Remove from list", "aria-label": `Remove ${f.file.name}`, onclick: () => { try { f.doc?.free?.(); } catch {} files.splice(i, 1); renderStage(); } }, "✕"));
     const fico = el("div", { class: "fico", "aria-hidden": true }, "PDF");
-    if (f.thumbs) f.thumbs.render(0, 36).then((cv) => { if (cv && fico.isConnected) { fico.textContent = ""; fico.classList.add("thumb"); fico.append(cv); } });
+    if (f.thumbs) f.thumbs.render(0, 44).then((cv) => { if (cv && fico.isConnected) { fico.textContent = ""; fico.classList.add("thumb"); fico.append(cv); } });
     const li = el("li", { class: "file", draggable: opts.reorder ? "true" : null }, fico, el("div", { class: "meta" }, el("div", { class: "name", title: f.file.name }, f.file.name), info), acts);
     if (opts.reorder) {
       li.ondragstart = (e) => { dragFrom = i; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(i)); };
@@ -242,6 +265,14 @@ export function rangeField(label, value, pageCount, oninput, placeholder = "e.g.
   return field(label, input, hint);
 }
 
+// ---------------------------------------------------------------- thumbnail size
+const SIZES = [["s", "Small", 120], ["m", "Medium", 170], ["l", "Large", 250]];
+let thumbSize = (() => { try { return localStorage.getItem("foliopdf.thumb") || "m"; } catch { return "m"; } })();
+export const tilePx = () => (SIZES.find((x) => x[0] === thumbSize) || SIZES[1])[2];
+export function sizeControl() {
+  return el("div", { class: "sizectl" }, el("span", {}, "Page size"), segmented(SIZES.map(([k, l]) => [k, l]), thumbSize, (v) => { thumbSize = v; try { localStorage.setItem("foliopdf.thumb", v); } catch {} renderStage(); }, "Thumbnail size"));
+}
+
 // ---------------------------------------------------------------- page grid
 /** Turns a set of 0-based indices into a compact 1-based range string. */
 export function indicesToSpec(idx) {
@@ -255,14 +286,14 @@ export function indicesToSpec(idx) {
  * (for extraction); otherwise the spec is compacted into ranges.
  */
 export function pageGrid(entry, rangeInput, onchange, opts = {}) {
-  const grid = el("div", { class: "tiles select", role: "group", "aria-label": "Click pages to select them" });
+  const grid = el("div", { class: "tiles select", role: "group", "aria-label": "Click pages to select them", style: `--tile:${tilePx()}px` });
   let selected = []; // 0-based, in click order
   const sync = () => { grid.querySelectorAll(".tile").forEach((t, i) => { const on = selected.includes(i); t.classList.toggle("on", on); t.setAttribute("aria-pressed", String(on)); const badge = t.querySelector(".order"); if (badge) badge.textContent = opts.ordered && on ? String(selected.indexOf(i) + 1) : ""; }); };
   const fromText = () => { try { const idx = rangeInput.value.trim() ? Array.from(parsePageRanges(rangeInput.value, entry.pages)) : []; selected = [...new Set(idx)]; } catch { selected = []; } sync(); };
   const infos = entry.doc.pages();
   for (let i = 0; i < entry.pages; i++) {
     const p = infos[i]; const w0 = p.mediaBox.x1 - p.mediaBox.x0, h0 = p.mediaBox.y1 - p.mediaBox.y0; const swap = p.rotation === "90" || p.rotation === "270";
-    const [w, h] = swap ? [h0, w0] : [w0, h0]; const scale = 84 / Math.max(w, h);
+    const [w, h] = swap ? [h0, w0] : [w0, h0]; const scale = (tilePx() - 24) / Math.max(w, h);
     const pg = el("div", { class: "pg", style: `width:${Math.round(w * scale)}px;height:${Math.round(h * scale)}px` }, String(i + 1));
     const tile = el("button", { type: "button", class: "tile", "aria-label": `Page ${i + 1}`, "aria-pressed": "false" }, pg, el("span", { class: "order" }), el("div", { class: "num" }, `Page ${i + 1}`));
     tile.onclick = () => { if (selected.includes(i)) selected = selected.filter((x) => x !== i); else selected.push(i); rangeInput.value = opts.ordered ? selected.map((x) => x + 1).join(", ") : indicesToSpec(selected); rangeInput.dispatchEvent(new Event("input", { bubbles: true })); sync(); };
@@ -276,7 +307,7 @@ export function pageGrid(entry, rangeInput, onchange, opts = {}) {
     el("button", { type: "button", class: "btn small", onclick: () => { selected = []; rangeInput.value = ""; rangeInput.dispatchEvent(new Event("input", { bubbles: true })); } }, "Clear"),
     el("span", { class: "hint", style: "align-self:center" }, opts.ordered ? "Click pages in the order you want them." : "Click pages to select or deselect them, or type a range above."));
   void onchange;
-  return el("div", {}, bar, grid);
+  return el("div", {}, bar, grid, sizeControl());
 }
 
 // ---------------------------------------------------------------- run + results
@@ -439,20 +470,23 @@ const STAGES = {
     put(dropzone(), fileList());
     const f = ready()[0]; if (!f) return;
     if (!STAGES.organize.o || STAGES.organize.o.for !== f) STAGES.organize.o = { for: f, tiles: f.doc.pages().map((p, i) => ({ src: i, rot: 0, del: false, w: p.mediaBox.x1 - p.mediaBox.x0, h: p.mediaBox.y1 - p.mediaBox.y0, swap: p.rotation === "90" || p.rotation === "270" })) };
+    const addBlank = (after) => { const ref = o.tiles[Math.max(0, Math.min(o.tiles.length - 1, after))]; const w = ref ? (ref.swap ? ref.h : ref.w) : 612, h = ref ? (ref.swap ? ref.w : ref.h) : 792; o.tiles.splice(after + 1, 0, { src: -1, blank: true, rot: 0, del: false, w, h, swap: false }); renderStage(); };
     const o = STAGES.organize.o;
-    const grid = el("div", { class: "tiles", role: "list", "aria-label": "Pages" });
+    const grid = el("div", { class: "tiles", role: "list", "aria-label": "Pages", style: `--tile:${tilePx()}px` });
     let dragFrom = null;
     const move = (from, to) => { if (to < 0 || to >= o.tiles.length) return; const [m] = o.tiles.splice(from, 1); o.tiles.splice(to, 0, m); renderStage(); };
     o.tiles.forEach((t, i) => {
       const [w, h] = t.swap ? [t.h, t.w] : [t.w, t.h];
-      const scale = 96 / Math.max(w, h);
-      const pg = el("div", { class: "pg", style: `width:${Math.round(w * scale)}px;height:${Math.round(h * scale)}px;transform:rotate(${t.rot}deg)` }, String(t.src + 1));
-      f.thumbs?.render(t.src, Math.round(w * scale)).then((cv) => { if (cv && pg.isConnected) { pg.textContent = ""; pg.classList.add("thumb"); pg.append(cv); } });
-      const tile = el("div", { class: "tile" + (t.del ? " deleted" : ""), draggable: "true", role: "listitem", "aria-label": `Page ${t.src + 1}${t.rot ? `, rotated ${t.rot} degrees` : ""}${t.del ? ", removed" : ""}` }, pg, el("div", { class: "num" }, t.del ? "Removed" : `Page ${t.src + 1}${t.rot ? ` · ${t.rot}°` : ""}`),
+      const scale = (tilePx() - 24) / Math.max(w, h);
+      const label = t.blank ? "Blank" : `Page ${t.src + 1}`;
+      const pg = el("div", { class: "pg" + (t.blank ? " blank" : ""), style: `width:${Math.round(w * scale)}px;height:${Math.round(h * scale)}px;transform:rotate(${t.rot}deg)` }, t.blank ? "" : String(t.src + 1));
+      if (!t.blank) f.thumbs?.render(t.src, Math.round(w * scale)).then((cv) => { if (cv && pg.isConnected) { pg.textContent = ""; pg.classList.add("thumb"); pg.append(cv); } });
+      const tile = el("div", { class: "tile" + (t.del ? " deleted" : ""), draggable: "true", role: "listitem", "aria-label": `${label}${t.rot ? `, rotated ${t.rot} degrees` : ""}${t.del ? ", removed" : ""}` }, pg, el("div", { class: "num" }, t.del ? "Removed" : `${label}${t.rot ? ` · ${t.rot}°` : ""}`),
         el("div", { class: "tacts" },
           el("button", { class: "iconbtn", title: "Move left", "aria-label": "Move left", disabled: i === 0, onclick: () => move(i, i - 1) }, "◀"),
           el("button", { class: "iconbtn", title: "Rotate", "aria-label": "Rotate 90 degrees", onclick: () => { t.rot = (t.rot + 90) % 360; renderStage(); } }, "↻"),
-          el("button", { class: "iconbtn", title: t.del ? "Restore" : "Remove", "aria-label": t.del ? "Restore page" : "Remove page", onclick: () => { t.del = !t.del; renderStage(); } }, t.del ? "↩" : "✕"),
+          el("button", { class: "iconbtn", title: t.del ? "Restore" : "Remove", "aria-label": t.del ? "Restore page" : "Remove page", onclick: () => { if (t.blank) o.tiles.splice(i, 1); else t.del = !t.del; renderStage(); } }, t.del ? "↩" : "✕"),
+          el("button", { class: "iconbtn", title: "Insert a blank page after this one", "aria-label": "Insert a blank page after this one", onclick: () => addBlank(i) }, "＋"),
           el("button", { class: "iconbtn", title: "Move right", "aria-label": "Move right", disabled: i === o.tiles.length - 1, onclick: () => move(i, i + 1) }, "▶")));
       tile.ondragstart = (e) => { dragFrom = i; tile.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(i)); };
       tile.ondragend = () => tile.classList.remove("dragging");
@@ -462,13 +496,43 @@ const STAGES = {
       grid.append(tile);
     });
     const keep = o.tiles.filter((t) => !t.del);
-    const changed = o.tiles.some((t, i) => t.src !== i || t.rot || t.del);
-    put(el("div", { class: "panel" }, el("h3", {}, "Drag pages into order. Rotate or remove with the buttons under each page."), grid,
-      el("div", { class: "row", style: "margin-top:14px" }, el("button", { class: "btn small", onclick: () => { o.tiles.reverse(); renderStage(); } }, "Reverse order"), el("button", { class: "btn small", onclick: () => { o.tiles.forEach((t) => (t.rot = (t.rot + 90) % 360)); renderStage(); } }, "Rotate all"), el("button", { class: "btn small", onclick: () => { STAGES.organize.o = null; renderStage(); } }, "Start over"))),
+    const real = keep.filter((t) => !t.blank);
+    const changed = o.tiles.some((t, i) => t.src !== i || t.rot || t.del || t.blank);
+    put(el("div", { class: "panel" }, el("h3", {}, "Drag pages into order. Rotate, remove or add blank pages with the buttons under each page."), grid,
+      el("div", { class: "row", style: "margin-top:14px" }, el("button", { class: "btn small", onclick: () => { o.tiles.reverse(); renderStage(); } }, "Reverse order"), el("button", { class: "btn small", onclick: () => { o.tiles.forEach((t) => (t.rot = (t.rot + 90) % 360)); renderStage(); } }, "Rotate all"), el("button", { class: "btn small", onclick: () => addBlank(o.tiles.length - 1) }, "Add a blank page at the end"), el("button", { class: "btn small", onclick: () => { STAGES.organize.o = null; renderStage(); } }, "Start over")), sizeControl()),
       cta(keep.length === o.tiles.length ? `Save ${plural(keep.length, "page")}` : `Save ${keep.length} of ${plural(o.tiles.length, "page")}`, () => runJob("Rebuilding", () => perFile("-organized", (doc) => {
-        doc.selectPages(keep.map((t) => t.src + 1).join(","));
+        doc.selectPages(real.map((t) => t.src + 1).join(","));
+        keep.forEach((t, k) => { if (t.blank) doc.insertBlankPages(k, 1, t.w, t.h); });
         keep.forEach((t, k) => { if (t.rot) doc.rotatePages(String(k + 1), t.rot); });
-      })), keep.length > 0 && changed, keep.length === 0 ? "Keep at least one page." : !changed ? "Nothing has changed yet." : null));
+      })), real.length > 0 && changed, real.length === 0 ? "Keep at least one page from the file." : !changed ? "Nothing has changed yet." : null));
+  },
+  resize() {
+    put(dropzone(), fileList(), summaryLine());
+    if (!ready().length) return;
+    const o = pref("resize", { kind: "size", size: "a4", landscape: false, mode: "fit", percent: 100, which: "all", custom: "" });
+    const single = ready().length === 1 ? ready()[0] : null;
+    const first = ready()[0];
+    const sizes = first.doc.pages().map((p) => { const w = p.mediaBox.x1 - p.mediaBox.x0, h = p.mediaBox.y1 - p.mediaBox.y0; return p.rotation === "90" || p.rotation === "270" ? [h, w] : [w, h]; });
+    const distinct = [...new Set(sizes.map(([w, h]) => sizeLabel(w, h)))];
+    const p = el("div", { class: "panel" }, el("h3", {}, "New size"),
+      el("p", { class: "summary", style: "margin:0 0 12px" }, distinct.length === 1 ? `${single ? "This file" : first.file.name} is currently ${distinct[0]}.` : `${single ? "This file" : first.file.name} mixes ${distinct.length} page sizes (${distinct.slice(0, 3).join(", ")}${distinct.length > 3 ? ", …" : ""}).`),
+      el("div", { class: "row" }, field("Change", segmented([["size", "To a standard size"], ["scale", "By a percentage"]], o.kind, (v) => { o.kind = v; renderStage(); }, "Resize mode"))));
+    if (o.kind === "size") p.append(
+      el("div", { class: "row" }, field("Size", segmented([["a4", "A4"], ["letter", "Letter"], ["legal", "Legal"], ["a3", "A3"], ["a5", "A5"], ["tabloid", "Tabloid"]], o.size, (v) => (o.size = v), "Page size")), field("Orientation", segmented([[false, "Portrait"], [true, "Landscape"]], o.landscape, (v) => (o.landscape = v), "Orientation"))),
+      el("div", { class: "row" }, field("If the shape is different", segmented([["fit", "Fit (keep everything, may add margins)"], ["fill", "Fill (crop the edges)"], ["stretch", "Stretch"]], o.mode, (v) => (o.mode = v), "Fit mode"))));
+    else p.append(el("div", { class: "row" }, field("Scale", el("input", { type: "number", min: 10, max: 400, value: o.percent, oninput: (e) => (o.percent = Math.min(400, Math.max(10, +e.target.value || 100))) }), "In percent. 50 halves the page and everything on it; 200 doubles it.")));
+    const pgs = el("div", { class: "row" }, field("Which pages", segmented([["all", "All pages"], ["custom", "Specific pages"]], o.which, (v) => { o.which = v; renderStage(); }, "Which pages")));
+    let grid = null;
+    if (o.which === "custom") { const rf = rangeField("Pages", o.custom, single ? single.pages : 0, (v) => (o.custom = v)); pgs.append(rf); if (single) grid = pageGrid(single, rf.querySelector("input"), null); }
+    p.append(pgs, grid);
+    put(p, cta(o.kind === "size" ? `Resize to ${o.size.toUpperCase().replace("LETTER", "Letter").replace("LEGAL", "Legal").replace("TABLOID", "Tabloid")}` : `Scale to ${o.percent}%`, () => runJob("Resizing", () => {
+      if (o.which === "custom" && !o.custom.trim()) throw new Error("Type which pages to resize, like 1, 3-5.");
+      return perFile("-resized", (doc) => {
+        const spec = o.which === "all" ? null : o.custom;
+        if (o.kind === "size") doc.resizePages(spec, { size: o.size + (o.landscape ? "-landscape" : ""), mode: o.mode });
+        else doc.scalePages(spec, o.percent / 100);
+      });
+    })));
   },
   watermark() {
     put(dropzone(), fileList(), summaryLine());

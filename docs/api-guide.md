@@ -53,6 +53,13 @@ doc.set_media_box(0, Rect::new(0.0, 0.0, 300.0, 400.0))?;
 // Copy pages from another document (fonts, images, annotations come along).
 let other = Document::load(&other_bytes)?;
 doc.import_pages(&other, &[0, 1], Some(0))?;   // insert at front; None = append
+
+// Resize, scale, reverse, insert blank pages (in `ops`).
+use foliopdf::ops::{self, FitMode};
+ops::resize_pages(&mut doc, &[0, 1], PageSize::A4, FitMode::Fit)?;   // content scaled to fit
+ops::scale_pages(&mut doc, &[2], 0.5)?;                             // page and content halved
+ops::reverse_pages(&mut doc)?;
+ops::insert_blank_pages(&mut doc, 0, 2, PageSize::LETTER)?;         // two blank pages at the front
 ```
 
 ## Page ranges

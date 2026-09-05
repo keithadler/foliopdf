@@ -27,7 +27,8 @@ use serde::{Deserialize, Serialize};
 use crate::crypto::EncryptionOptions;
 use crate::document::{Document, LoadOptions, Metadata, SaveOptions};
 use crate::error::{Error, Result};
-use crate::ops::{self, ImageStamp, PageNumbers, TextStamp};
+use crate::ops::{self, FitMode, ImageStamp, PageNumbers, TextStamp};
+use crate::page::PageSize;
 
 /// Current preset schema version.
 pub const PRESET_SCHEMA: u32 = 1;
@@ -103,6 +104,48 @@ pub enum Step {
     },
     /// Remove XMP metadata, the info dictionary and thumbnails.
     StripMetadata,
+    /// Change the page size, scaling content to fit.
+    Resize {
+        /// Page range expression; omitted means all pages.
+        #[serde(default)]
+        pages: Option<String>,
+        /// Named size (`a4`, `letter`, `legal`, `a3`, `a5`, `tabloid`,
+        /// optionally with `-landscape`). Alternatively give `width` and `height`.
+        #[serde(default)]
+        size: Option<String>,
+        /// Width in points when no `size` is given.
+        #[serde(default)]
+        width: Option<f64>,
+        /// Height in points when no `size` is given.
+        #[serde(default)]
+        height: Option<f64>,
+        /// `fit` (default), `fill` or `stretch`.
+        #[serde(default)]
+        mode: FitMode,
+    },
+    /// Scale pages (and their content) by a factor; 0.5 halves them.
+    Scale {
+        /// Page range expression; omitted means all pages.
+        #[serde(default)]
+        pages: Option<String>,
+        /// Multiplier, greater than zero.
+        factor: f64,
+    },
+    /// Reverse the page order.
+    Reverse,
+    /// Insert blank pages.
+    BlankPages {
+        /// Insert before this 1-based page number; omitted or 0 appends.
+        #[serde(default)]
+        at: Option<usize>,
+        /// How many pages (default 1).
+        #[serde(default)]
+        count: Option<usize>,
+        /// Named size; defaults to the size of the page before the insertion
+        /// point (or Letter in an empty document).
+        #[serde(default)]
+        size: Option<String>,
+    },
     /// Split into several documents. Must be the last step.
     Split {
         /// Pages per output file.
@@ -244,6 +287,27 @@ impl Preset {
                 Step::StampImage { stamp, .. } if !(0.0..=1.0).contains(&stamp.opacity) => {
                     return Err(Error::Preset(format!(
                         "step {}: opacity must be 0–1",
+                        i + 1
+                    )));
+                }
+                Step::Resize {
+                    size,
+                    width,
+                    height,
+                    ..
+                } => {
+                    resolve_size(size.as_deref(), *width, *height)
+                        .map_err(|e| Error::Preset(format!("step {}: {e}", i + 1)))?;
+                }
+                Step::Scale { factor, .. } if !(*factor > 0.0 && factor.is_finite()) => {
+                    return Err(Error::Preset(format!(
+                        "step {}: factor must be greater than zero",
+                        i + 1
+                    )));
+                }
+                Step::BlankPages { size: Some(sz), .. } if PageSize::by_name(sz).is_none() => {
+                    return Err(Error::Preset(format!(
+                        "step {}: unknown page size '{sz}'",
                         i + 1
                     )));
                 }
@@ -467,6 +531,21 @@ fn pages_or_all(doc: &Document, spec: &Option<String>) -> Result<Vec<usize>> {
     }
 }
 
+/// Turns a `resize` step's size fields into a [`PageSize`].
+pub fn resolve_size(
+    size: Option<&str>,
+    width: Option<f64>,
+    height: Option<f64>,
+) -> Result<PageSize> {
+    match (size, width, height) {
+        (Some(name), _, _) => PageSize::by_name(name)
+            .ok_or_else(|| Error::Preset(format!("unknown page size '{name}' (try a4, letter, legal, a3, a5, tabloid, or add -landscape)"))),
+        (None, Some(w), Some(h)) if w > 1.0 && h > 1.0 && w.is_finite() && h.is_finite() => Ok(PageSize::new(w, h)),
+        (None, Some(_), Some(_)) => Err(Error::Preset("width and height must be larger than 1 point".into())),
+        _ => Err(Error::Preset("resize needs a 'size' name or both 'width' and 'height'".into())),
+    }
+}
+
 fn process(
     preset: &Preset,
     mut doc: Document,
@@ -513,6 +592,39 @@ fn process(
             }
             Step::Metadata { metadata } => doc.set_metadata(metadata),
             Step::StripMetadata => doc.strip_metadata(),
+            Step::Resize {
+                pages,
+                size,
+                width,
+                height,
+                mode,
+            } => {
+                let idx = pages_or_all(&doc, pages)?;
+                let target = resolve_size(size.as_deref(), *width, *height)?;
+                ops::resize_pages(&mut doc, &idx, target, *mode)?;
+            }
+            Step::Scale { pages, factor } => {
+                let idx = pages_or_all(&doc, pages)?;
+                ops::scale_pages(&mut doc, &idx, *factor)?;
+            }
+            Step::Reverse => ops::reverse_pages(&mut doc)?,
+            Step::BlankPages { at, count, size } => {
+                let n = doc.page_count();
+                let at = match at {
+                    Some(a) if *a > 0 => (*a - 1).min(n),
+                    _ => n,
+                };
+                let sz = match size {
+                    Some(s) => PageSize::by_name(s)
+                        .ok_or_else(|| Error::Preset(format!("unknown page size '{s}'")))?,
+                    None if n == 0 => PageSize::LETTER,
+                    None => {
+                        let info = doc.page_info(at.saturating_sub(1).min(n - 1))?;
+                        PageSize::new(info.media_box.width(), info.media_box.height())
+                    }
+                };
+                ops::insert_blank_pages(&mut doc, at, count.unwrap_or(1).max(1), sz)?;
+            }
             Step::Split { every, ranges } => {
                 let chunks: Vec<Vec<usize>> = match (every, ranges) {
                     (Some(e), _) => ops::chunk_pages(doc.page_count(), *e),

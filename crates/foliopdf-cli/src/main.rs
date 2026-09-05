@@ -25,6 +25,10 @@ COMMANDS
   split    <in.pdf> --every N | --ranges \"1-3\" \"4-\"   [--out-dir D] [--name T]
   pages    <in.pdf> <out.pdf> --select \"1-3,7\" | --delete \"2,4\"
   rotate   <in.pdf> <out.pdf> --degrees 90 [--pages odd]
+  resize   <in.pdf> <out.pdf> --size a4|letter|WxH [--mode fit|fill|stretch] | --scale 0.5
+                              [--pages all]
+  reverse  <in.pdf> <out.pdf>
+  blank    <in.pdf> <out.pdf> [--at N] [--count 1] [--size a4]   Insert blank pages before page N
   compress <in.pdf> <out.pdf> [--level 1-10] [--strip-metadata]
   encrypt  <in.pdf> <out.pdf> [--user PW] [--owner PW] [--method aes256|aes128|rc4]
                               [--no-print] [--no-copy] [--no-modify] [--no-annotate]
@@ -159,6 +163,9 @@ fn run(argv: &[String]) -> Result<(), String> {
         "split" => split(&args),
         "pages" => pages(&args),
         "rotate" => rotate(&args),
+        "resize" => resize(&args),
+        "reverse" => reverse(&args),
+        "blank" => blank(&args),
         "compress" => compress(&args),
         "encrypt" => encrypt(&args),
         "decrypt" => decrypt(&args),
@@ -375,6 +382,66 @@ fn rotate(args: &Args) -> Result<(), String> {
     let degrees: i64 = args.num("degrees", 90)?;
     let idx = range(args, &doc, "pages")?;
     ops::rotate_pages(&mut doc, &idx, degrees).map_err(|e| e.to_string())?;
+    write(&mut doc, out, &save_opts(args)?)
+}
+
+fn resize(args: &Args) -> Result<(), String> {
+    let (input, out) = (args.pos(1, "input file")?, args.pos(2, "output file")?);
+    let mut doc = load(args, input)?;
+    let idx = range(args, &doc, "pages")?;
+    if let Some(f) = args.flag("scale") {
+        let factor: f64 = f
+            .parse()
+            .map_err(|_| format!("--scale: '{f}' is not a number"))?;
+        ops::scale_pages(&mut doc, &idx, factor).map_err(|e| e.to_string())?;
+    } else {
+        let size = args
+            .flag("size")
+            .ok_or("resize needs --size (e.g. a4, letter, 612x792) or --scale")?;
+        let target = match size.split_once(['x', 'X']) {
+            Some((w, h)) if w.parse::<f64>().is_ok() && h.parse::<f64>().is_ok() => {
+                foliopdf::PageSize::new(w.parse().unwrap(), h.parse().unwrap())
+            }
+            _ => foliopdf::PageSize::by_name(size).ok_or_else(|| format!("unknown page size '{size}' (try a4, letter, legal, a3, a5, tabloid, a4-landscape, or WxH in points)"))?,
+        };
+        let mode = match args.flag("mode").unwrap_or("fit") {
+            "fit" => ops::FitMode::Fit,
+            "fill" => ops::FitMode::Fill,
+            "stretch" => ops::FitMode::Stretch,
+            m => return Err(format!("--mode must be fit, fill or stretch, not '{m}'")),
+        };
+        ops::resize_pages(&mut doc, &idx, target, mode).map_err(|e| e.to_string())?;
+    }
+    write(&mut doc, out, &save_opts(args)?)
+}
+
+fn reverse(args: &Args) -> Result<(), String> {
+    let (input, out) = (args.pos(1, "input file")?, args.pos(2, "output file")?);
+    let mut doc = load(args, input)?;
+    ops::reverse_pages(&mut doc).map_err(|e| e.to_string())?;
+    write(&mut doc, out, &save_opts(args)?)
+}
+
+fn blank(args: &Args) -> Result<(), String> {
+    let (input, out) = (args.pos(1, "input file")?, args.pos(2, "output file")?);
+    let mut doc = load(args, input)?;
+    let n = doc.page_count();
+    let at: usize = args.num("at", 0usize)?;
+    let at = if at == 0 { n } else { (at - 1).min(n) };
+    let count: usize = args.num("count", 1usize)?;
+    let size = match args.flag("size") {
+        Some(s) => {
+            foliopdf::PageSize::by_name(s).ok_or_else(|| format!("unknown page size '{s}'"))?
+        }
+        None if n == 0 => foliopdf::PageSize::LETTER,
+        None => {
+            let info = doc
+                .page_info(at.saturating_sub(1).min(n - 1))
+                .map_err(|e| e.to_string())?;
+            foliopdf::PageSize::new(info.media_box.width(), info.media_box.height())
+        }
+    };
+    ops::insert_blank_pages(&mut doc, at, count.max(1), size).map_err(|e| e.to_string())?;
     write(&mut doc, out, &save_opts(args)?)
 }
 

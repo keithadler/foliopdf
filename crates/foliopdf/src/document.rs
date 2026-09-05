@@ -1111,6 +1111,40 @@ impl Document {
         Ok(())
     }
 
+    /// Wraps the page's existing content between `prefix` and `suffix`.
+    ///
+    /// Used to apply a transform to everything already on the page (see
+    /// [`ops::resize_pages`](crate::ops::resize_pages)). The prefix and suffix
+    /// become separate content streams, so the original streams are untouched.
+    pub fn wrap_content(&mut self, index: usize, prefix: &[u8], suffix: &[u8]) -> Result<()> {
+        let page = self.page_ref(index)?;
+        let existing: Vec<Object> = match self.get(page).as_dict().and_then(|d| d.get("Contents")) {
+            Some(Object::Reference(r)) => match self.get(*r) {
+                Object::Array(a) => a.clone(),
+                _ => vec![Object::Reference(*r)],
+            },
+            Some(Object::Array(a)) => a.clone(),
+            _ => Vec::new(),
+        };
+        let new_stream = |doc: &mut Document, bytes: &[u8]| -> Object {
+            let s = Stream::new(
+                Dict::new().with("Filter", "FlateDecode"),
+                filters::flate_encode(bytes, 6),
+            );
+            doc.add(s.into()).into()
+        };
+        let mut arr = Vec::with_capacity(existing.len() + 2);
+        arr.push(new_stream(self, prefix));
+        arr.extend(existing);
+        arr.push(new_stream(self, suffix));
+        let d = self
+            .get_mut(page)
+            .and_then(Object::as_dict_mut)
+            .ok_or_else(|| Error::malformed("page is not a dictionary"))?;
+        d.set("Contents", arr);
+        Ok(())
+    }
+
     /// Concatenated, decoded content stream of page `index`.
     pub fn page_content(&self, index: usize) -> Result<Vec<u8>> {
         let page = self.page_ref(index)?;

@@ -5,20 +5,34 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>foliopdf — free PDF tools that stay on your device</title>
 <meta name="description" content="Merge, split, compress, protect, unlock, rotate, watermark and number PDFs in your browser. Free, open source, and nothing is uploaded.">
-<meta name="theme-color" content="#0b63d6">
+<meta name="theme-color" content="#2563eb">
+<script>
+  // Apply the saved theme before first paint to avoid a flash.
+  (function () { try { var t = localStorage.getItem("foliopdf.theme"); var dark = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches); document.documentElement.dataset.theme = dark ? "dark" : "light"; } catch (e) { document.documentElement.dataset.theme = "light"; } })();
+</script>
 <style>
   :root {
-    --bg: #f6f7f9; --card: #fff; --ink: #14171f; --muted: #5c6470; --line: #e3e6ea; --line-strong: #c9cfd6;
-    --accent: #0b63d6; --accent-ink: #fff; --accent-soft: #e6f0fd; --ok: #1a7f4b; --ok-soft: #e4f4ea; --warn: #8a4b00; --warn-soft: #fdf1df; --err: #b3261e; --err-soft: #fbe9e7;
-    --radius: 14px; --shadow: 0 1px 2px rgba(0,0,0,.05), 0 8px 24px -12px rgba(20,23,31,.18);
-    color-scheme: light dark;
+    --bg: #f3f5f8; --bg-grad: radial-gradient(1200px 500px at 50% -10%, #dbe7ff 0%, transparent 60%);
+    --card: #ffffff; --ink: #0f172a; --muted: #5b6472; --line: #e2e6ec; --line-strong: #c7ceD8;
+    --accent: #2563eb; --accent-ink: #ffffff; --accent-soft: #e8f0fe; --accent-glow: 0 10px 30px -12px rgba(37, 99, 235, .45);
+    --ok: #15803d; --ok-soft: #e3f5e9; --warn: #92400e; --warn-soft: #fdf1df; --err: #b91c1c; --err-soft: #fde8e8;
+    --paper: #ffffff; --paper-line: #d9dee6;
+    --radius: 16px; --shadow: 0 1px 2px rgba(15, 23, 42, .06), 0 10px 30px -18px rgba(15, 23, 42, .25);
+    --tile: 170px;
+    color-scheme: light;
   }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg: #0f1216; --card: #171b21; --ink: #eef1f5; --muted: #9aa3ae; --line: #2a3038; --line-strong: #3a424c; --accent: #4f8ff7; --accent-soft: #14253f; --ok-soft: #12301f; --warn: #f0b35a; --warn-soft: #3a2a0f; --err: #ff7b72; --err-soft: #3d1b19; --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6); }
+  :root[data-theme="dark"] {
+    --bg: #0b0f14; --bg-grad: radial-gradient(1200px 500px at 50% -10%, #12233f 0%, transparent 60%);
+    --card: #121820; --ink: #e8edf3; --muted: #97a3b3; --line: #232c37; --line-strong: #364252;
+    --accent: #5b9cff; --accent-ink: #061225; --accent-soft: #132646; --accent-glow: 0 10px 30px -12px rgba(91, 156, 255, .5);
+    --ok: #4ade80; --ok-soft: #10301d; --warn: #f2b55c; --warn-soft: #3a2a0f; --err: #ff8a80; --err-soft: #3d1b19;
+    --paper: #f5f5f5; --paper-line: #cfd4db;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 12px 32px -18px rgba(0, 0, 0, .8);
+    color-scheme: dark;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; }
-  body { background: var(--bg); color: var(--ink); font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  body { background: var(--bg-grad), var(--bg); background-attachment: fixed; color: var(--ink); font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
   body.dragging::after { content: "Drop to add"; position: fixed; inset: 0; background: color-mix(in srgb, var(--accent) 12%, transparent); border: 4px dashed var(--accent); display: grid; place-items: center; font-size: 28px; font-weight: 700; color: var(--accent); pointer-events: none; z-index: 50; }
   a { color: var(--accent); }
   button { font: inherit; color: inherit; }
@@ -31,6 +45,9 @@
   .brand small { font-weight: 500; color: var(--muted); font-size: 14px; margin-left: 6px; }
   nav a { color: var(--muted); text-decoration: none; margin-left: 18px; font-size: 15px; }
   nav a:hover { color: var(--ink); }
+  nav { display: flex; align-items: center; gap: 4px; }
+  .theme { display: inline-flex; align-items: center; gap: 6px; margin-left: 14px; border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 6px 12px; font-size: 14px; cursor: pointer; color: var(--muted); }
+  .theme:hover { border-color: var(--accent); color: var(--ink); }
 
   .hero { text-align: center; padding: 28px 0 22px; }
   .hero h1 { font-size: clamp(30px, 5vw, 44px); margin: 0 0 8px; letter-spacing: -.02em; line-height: 1.1; }
@@ -41,7 +58,7 @@
 
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-top: 26px; }
   .tool { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; text-align: left; cursor: pointer; box-shadow: var(--shadow); transition: transform .12s, border-color .12s; display: flex; flex-direction: column; gap: 6px; }
-  .tool:hover, .tool:focus-visible { transform: translateY(-2px); border-color: var(--accent); }
+  .tool:hover, .tool:focus-visible { transform: translateY(-3px); border-color: var(--accent); box-shadow: var(--accent-glow); }
   .ico { width: 42px; height: 42px; border-radius: 10px; display: grid; place-items: center; font-size: 22px; background: var(--accent-soft); }
   .tool .ico { margin-bottom: 6px; }
   .tool b { font-size: 17px; }
@@ -69,7 +86,7 @@
   .file { display: flex; align-items: center; gap: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
   .file[draggable=true] { cursor: grab; }
   .file.drag-over { border-color: var(--accent); box-shadow: 0 -3px 0 var(--accent); }
-  .fico { width: 36px; height: 44px; border-radius: 6px; background: var(--accent-soft); display: grid; place-items: center; font-size: 11px; font-weight: 800; color: var(--accent); flex: none; letter-spacing: .02em; }
+  .fico { width: 44px; height: 56px; border-radius: 6px; background: var(--accent-soft); display: grid; place-items: center; font-size: 11px; font-weight: 800; color: var(--accent); flex: none; letter-spacing: .02em; }
   .file .meta, .out .meta { flex: 1; min-width: 0; }
   .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .info { color: var(--muted); font-size: 14px; }
@@ -118,7 +135,7 @@
 
   .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 12px 20px; font-weight: 600; cursor: pointer; text-decoration: none; color: inherit; }
   .btn:hover { border-color: var(--accent); }
-  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-size: 17px; padding: 15px 26px; }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-size: 17px; padding: 15px 26px; box-shadow: var(--accent-glow); }
   .btn.primary:hover { filter: brightness(1.08); }
   .btn.small { padding: 8px 14px; font-size: 14px; }
   .btn:disabled { opacity: .5; cursor: default; filter: none; }
@@ -144,19 +161,22 @@
   .progress i.det { animation: none; transition: width .2s; }
   @keyframes slide { 0% { margin-left: 0 } 50% { margin-left: 70% } 100% { margin-left: 0 } }
 
-  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 12px; margin-top: 14px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--tile), 1fr)); gap: 14px; margin-top: 14px; }
   .tile { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px; text-align: center; cursor: grab; user-select: none; }
   .tile.dragging { opacity: .4; }
   .tile.over { border-color: var(--accent); box-shadow: -3px 0 0 var(--accent); }
-  .tile .pg { margin: 0 auto; background: var(--bg); border: 1px solid var(--line-strong); border-radius: 4px; display: grid; place-items: center; font-weight: 700; color: var(--muted); font-size: 22px; transition: transform .15s; }
+  .tile .pg { margin: 0 auto; background: var(--paper); border: 1px solid var(--paper-line); border-radius: 4px; display: grid; place-items: center; font-weight: 700; color: #9aa3ae; font-size: 26px; transition: transform .15s; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
   .tile .num { font-size: 13px; color: var(--muted); margin-top: 6px; }
   .tile .tacts { display: flex; justify-content: center; gap: 3px; margin-top: 6px; }
   .tile .tacts .iconbtn { width: 28px; height: 28px; font-size: 13px; }
   .tile.deleted .pg { opacity: .25; }
+  .tile .pg.blank { background: repeating-linear-gradient(135deg, var(--paper) 0 10px, #eef0f3 10px 20px); }
   .tile.deleted { border-style: dashed; }
 
   .fico.thumb { background: #fff; overflow: hidden; border: 1px solid var(--line-strong); } .fico.thumb canvas { display: block; width: 100% !important; height: 100% !important; object-fit: cover; }
   .pg.thumb { background: #fff; color: transparent; overflow: hidden; } .pg.thumb canvas { display: block; }
+  .sizectl { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+  .sizectl span { font-size: 14px; color: var(--muted); }
   .tiles.select .tile { padding: 6px; cursor: pointer; position: relative; border-width: 2px; }
   .tiles.select .tile.on { border-color: var(--accent); background: var(--accent-soft); }
   .tiles.select .tile .order { position: absolute; top: 6px; right: 6px; min-width: 22px; height: 22px; border-radius: 11px; background: var(--accent); color: var(--accent-ink); font-size: 12px; font-weight: 700; display: grid; place-items: center; padding: 0 6px; }
@@ -194,7 +214,7 @@
       <svg viewBox="0 0 28 28" fill="none" aria-hidden="true"><rect x="3" y="2" width="18" height="24" rx="3" fill="var(--accent)"/><path d="M15 2v7h6" fill="var(--accent-soft)"/><rect x="7" y="13" width="10" height="2" rx="1" fill="#fff"/><rect x="7" y="17" width="8" height="2" rx="1" fill="#fff"/></svg>
       foliopdf <small>free PDF tools</small>
     </a>
-    <nav><a href="https://github.com/keithadler/foliopdf" target="_blank" rel="noopener">Open source</a><a href="#batch">Advanced</a></nav>
+    <nav><a href="https://github.com/keithadler/foliopdf" target="_blank" rel="noopener">Open source</a><a href="#batch">Advanced</a><button class="theme" id="theme" type="button" aria-label="Switch colour theme" title="Switch colour theme"><span id="theme-ico">◐</span><span id="theme-label">Auto</span></button></nav>
   </header>
 
   <section class="view active" id="view-home">
@@ -227,7 +247,7 @@
 <input type="file" id="picker" accept="application/pdf,.pdf" multiple class="sr" aria-hidden="true">
 <input type="file" id="imgpicker" accept="image/png,image/jpeg" class="sr" aria-hidden="true">
 
-<script type="module" src="./app.js"></script>
+<script type="module" src="./app.js?v=dev"></script>
 
 </body>
 </html>

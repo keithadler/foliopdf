@@ -34,6 +34,8 @@ jobs:
           mkdir -p site/pkg site/vendor
           cp examples/web/index.html examples/web/*.js site/
           cp -r examples/web/vendor/. site/vendor/
+          # Cache-bust module imports so a new deploy is picked up immediately.
+          sed -i "s/?v=dev/?v=${GITHUB_SHA::8}/g" site/index.html site/*.js
           cp pkg/foliopdf.js pkg/foliopdf_bg.wasm site/pkg/
           touch site/.nojekyll
       - uses: actions/upload-pages-artifact@v3

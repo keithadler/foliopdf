@@ -1,13 +1,17 @@
 // Batch & presets: a visual builder for reusable recipes. A preset is a list of
 // steps plus output settings; it is saved as JSON in this browser and runs
 // unchanged with the `folio` command-line tool.
-import { $, el, plural, toast, friendly, field, check, segmented, anchorPicker, swatches, passwordInput, cta, notice, rangeField, runJob, setProgress, ready, summaryLine, dropzone, fileList, put, renderStage, getFiles, runBatch, PresetStore } from "./app.js";
+import { $, el, plural, toast, friendly, field, check, segmented, anchorPicker, swatches, passwordInput, cta, notice, rangeField, runJob, setProgress, ready, summaryLine, dropzone, fileList, put, renderStage, getFiles, runBatch, PresetStore } from "./app.js?v=dev";
 
 const KEY = "foliopdf.presets";
 const STEP_TYPES = [
   ["select-pages", "Keep only some pages", "Keep the listed pages, in that order."],
   ["delete-pages", "Delete pages", "Remove the listed pages."],
   ["rotate", "Rotate", "Turn pages by 90, 180 or 270 degrees."],
+  ["resize", "Page size", "Change pages to A4, Letter or another size."],
+  ["scale", "Scale", "Shrink or enlarge pages by a factor."],
+  ["reverse", "Reverse order", "Last page first."],
+  ["blank-pages", "Blank pages", "Insert empty pages."],
   ["stamp-text", "Text watermark", "Stamp text like DRAFT on pages."],
   ["stamp-image", "Image or logo", "Stamp a PNG or JPEG on pages."],
   ["page-numbers", "Page numbers", "Add page numbers."],
@@ -19,6 +23,10 @@ const DEFAULTS = {
   "select-pages": () => ({ op: "select-pages", pages: "1-" }),
   "delete-pages": () => ({ op: "delete-pages", pages: "" }),
   rotate: () => ({ op: "rotate", degrees: 90 }),
+  resize: () => ({ op: "resize", size: "a4", mode: "fit" }),
+  scale: () => ({ op: "scale", factor: 0.5 }),
+  reverse: () => ({ op: "reverse" }),
+  "blank-pages": () => ({ op: "blank-pages", count: 1 }),
   "stamp-text": () => ({ op: "stamp-text", text: "DRAFT", size: 72, opacity: 0.3, rotation: 45, color: [0.48, 0.48, 0.48], position: "center" }),
   "stamp-image": () => ({ op: "stamp-image", asset: "image", width: 120, opacity: 1, position: "bottom-right" }),
   "page-numbers": () => ({ op: "page-numbers", format: "{page} / {pages}", position: "bottom-center", size: 10, startAt: 1 }),
@@ -109,6 +117,10 @@ function stepCard(st, i, p) {
     case "select-pages": body.append(el("div", { class: "row" }, field("Pages to keep, in order", el("input", { type: "text", value: st.pages || "", placeholder: "e.g. 1-3, last", spellcheck: "false", oninput: (e) => (st.pages = e.target.value) })))); break;
     case "delete-pages": body.append(el("div", { class: "row" }, field("Pages to delete", el("input", { type: "text", value: st.pages || "", placeholder: "e.g. 2, 5-7", spellcheck: "false", oninput: (e) => (st.pages = e.target.value) })))); break;
     case "rotate": body.append(el("div", { class: "row" }, field("Direction", segmented([[90, "↻ 90°"], [180, "180°"], [270, "↺ 90°"]], st.degrees ?? 90, (v) => (st.degrees = v), "Rotation")), pagesField())); break;
+    case "resize": { const land = (st.size || "").endsWith("-landscape"); const base = (st.size || "a4").replace("-landscape", ""); body.append(el("div", { class: "row" }, field("Size", segmented([["a4", "A4"], ["letter", "Letter"], ["legal", "Legal"], ["a3", "A3"], ["a5", "A5"], ["tabloid", "Tabloid"]], base, (v) => (st.size = v + (land ? "-landscape" : "")), "Page size")), field("Orientation", segmented([[false, "Portrait"], [true, "Landscape"]], land, (v) => (st.size = base + (v ? "-landscape" : "")), "Orientation")), field("If the shape differs", segmented([["fit", "Fit"], ["fill", "Fill"], ["stretch", "Stretch"]], st.mode || "fit", (v) => (st.mode = v), "Fit mode")), pagesField())); break; }
+    case "scale": body.append(el("div", { class: "row" }, field("Factor", el("input", { type: "number", min: 0.1, max: 4, step: 0.05, value: st.factor ?? 0.5, oninput: (e) => (st.factor = +e.target.value || 1) }), "0.5 halves the pages, 2 doubles them."), pagesField())); break;
+    case "reverse": body.append(el("p", { class: "summary", style: "margin:0" }, "Puts the pages in reverse order.")); break;
+    case "blank-pages": body.append(el("div", { class: "row" }, field("Insert before page", el("input", { type: "number", min: 0, value: st.at ?? 0, oninput: (e) => { const v = +e.target.value || 0; if (v) st.at = v; else delete st.at; } }), "0 = add at the end."), field("How many", el("input", { type: "number", min: 1, value: st.count ?? 1, oninput: (e) => (st.count = Math.max(1, +e.target.value || 1)) })), field("Size", segmented([["", "Same as neighbour"], ["a4", "A4"], ["letter", "Letter"]], st.size || "", (v) => { if (v) st.size = v; else delete st.size; }, "Blank page size")))); break;
     case "stamp-text": body.append(
       el("div", { class: "row" }, field("Text", el("input", { type: "text", value: st.text || "", oninput: (e) => (st.text = e.target.value) }), "{page} and {pages} are replaced"), field("Size", el("input", { type: "number", min: 6, max: 300, value: st.size ?? 36, oninput: (e) => (st.size = +e.target.value || 36) })), field("Opacity", el("input", { type: "range", min: 0.05, max: 1, step: 0.05, value: st.opacity ?? 0.5, oninput: (e) => (st.opacity = +e.target.value) }))),
       el("div", { class: "row" }, field("Angle", segmented([[0, "Straight"], [45, "Diagonal"], [90, "Vertical"]], st.rotation ?? 0, (v) => (st.rotation = v), "Angle")), field("Colour", swatches(hex(st.color || [0.48, 0.48, 0.48]), (rgb) => (st.color = rgb))), field("Position", anchorPicker(st.position || "center", (v) => (st.position = v))), pagesField()),
